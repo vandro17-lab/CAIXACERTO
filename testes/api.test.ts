@@ -13,6 +13,11 @@ beforeEach(async () => {
   const banco = await abrirBanco();
   db = banco.db;
   app = criarApp(banco.deps);
+  // Usuários cadastrados em todas as lojas, para os testes que não tratam do cadastro.
+  await db.exec(`
+    insert into usuarios (usuario_id, nome) values ('u1', 'Maria Souza'), ('u2', 'João'), ('u3', 'Ana'), ('u4', 'João Lima');
+    insert into usuario_lojas (usuario_id, loja_id) select u.usuario_id, l.loja_id from usuarios u cross join lojas l;
+  `);
 });
 
 type Resposta = { status: number; corpo: any };
@@ -476,5 +481,141 @@ describe("gravação do rascunho em comando único", () => {
     const lido2 = await chamar("GET", `/fechamentos/${f.id}`, undefined, f.t);
     expect(lido2.corpo.fechamento).toEqual(r.corpo.fechamento);
     expect(lido2.corpo.fechamento.lancamentos).toHaveLength(6);
+  });
+});
+
+describe("usuários cadastrados por loja", () => {
+  it("só o ADM cadastra; o usuário precisa de nome e de ao menos uma loja; nomes ativos não se repetem", async () => {
+    expect((await chamar("POST", "/admin/usuarios", { nome: "Carla", lojaIds: ["araca-grill"] })).status).toBe(401);
+    const a = await admin();
+    expect((await chamar("POST", "/admin/usuarios", { nome: "C", lojaIds: ["araca-grill"] }, a)).status).toBe(422);
+    expect((await chamar("POST", "/admin/usuarios", { nome: "Carla", lojaIds: [] }, a)).status).toBe(422);
+    expect((await chamar("POST", "/admin/usuarios", { nome: "Carla", lojaIds: ["nao-existe"] }, a)).status).toBe(422);
+    const r = await chamar("POST", "/admin/usuarios", { nome: "Carla", lojaIds: ["araca-grill"] }, a);
+    expect(r.status).toBe(200);
+    const carla = r.corpo.usuarios.find((u: any) => u.nome === "Carla");
+    expect(carla).toMatchObject({ ativo: true, lojaIds: ["araca-grill"] });
+    expect((await chamar("POST", "/admin/usuarios", { nome: "carla", lojaIds: ["araca-grill"] }, a)).status).toBe(409);
+  });
+
+  it("o fechamento só é criado por usuário ativo cadastrado para a loja, e guarda o nome do cadastro", async () => {
+    const a = await admin();
+    const r = await chamar("POST", "/admin/usuarios", { nome: "Carla Dias", lojaIds: ["araca-grill"] }, a);
+    const id = r.corpo.usuarios.find((u: any) => u.nome === "Carla Dias").usuarioId;
+
+    expect((await criar({ responsavelNome: "Desconhecido" })).corpo.codigo).toBe("USUARIO_NAO_CADASTRADO");
+    expect((await criar({ responsavelNome: "Carla Dias", lojaId: "vila-grill-1" })).corpo.codigo).toBe("USUARIO_NAO_CADASTRADO");
+    const ok = await criar({ responsavelNome: "carla dias", lojaId: "araca-grill" });
+    expect(ok.status).toBe(201);
+    expect(ok.corpo.fechamento.responsavelNome).toBe("Carla Dias");
+
+    // A configuração pública lista só os ativos, com as lojas de cada um.
+    const cfg = await chamar("GET", "/config");
+    expect(cfg.corpo.usuarios.find((u: any) => u.usuarioId === id)).toMatchObject({ nome: "Carla Dias", lojaIds: ["araca-grill"] });
+
+    // Trocar as lojas e desativar.
+    const t = await chamar("PUT", `/admin/usuarios/${id}`, { lojaIds: ["vila-grill-1", "vila-grill-2"] }, a);
+    expect(t.corpo.usuarios.find((u: any) => u.usuarioId === id).lojaIds).toEqual(["vila-grill-1", "vila-grill-2"]);
+    expect((await criar({ responsavelNome: "Carla Dias", lojaId: "araca-grill", turno: "manha" })).status).toBe(422);
+    expect((await criar({ responsavelNome: "Carla Dias", lojaId: "vila-grill-2" })).status).toBe(201);
+    await chamar("PUT", `/admin/usuarios/${id}`, { ativo: false }, a);
+    expect((await criar({ responsavelNome: "Carla Dias", lojaId: "vila-grill-2", turno: "tarde" })).status).toBe(422);
+    expect((await chamar("GET", "/config")).corpo.usuarios.some((u: any) => u.usuarioId === id)).toBe(false);
+  });
+
+  it("no rascunho, trocar o responsável ou a loja exige usuário cadastrado; a correção também", async () => {
+    const f = await criar();
+    const base = { aberturaCentavos: 0, houveSangria: false, sangriaCentavos: 0, lancamentos: [] };
+    const ruim = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...ident({ responsavelNome: "Fulano" }), ...base, revisao: 1 }, f.t);
+    expect(ruim.corpo.codigo).toBe("USUARIO_NAO_CADASTRADO");
+    const bom = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...ident({ responsavelNome: "ana" }), ...base, revisao: 1 }, f.t);
+    expect(bom.corpo.fechamento.responsavelNome).toBe("Ana");
+
+    const g = await finalizado({ turno: "manha" });
+    const c1 = await chamar("POST", `/fechamentos/${g.id}/corrigir`, correcao(g.valores, { autorDeclarado: "Fulano" }), g.t);
+    expect(c1.corpo.codigo).toBe("USUARIO_NAO_CADASTRADO");
+    expect((await chamar("POST", `/fechamentos/${g.id}/corrigir`, correcao(g.valores, { autorDeclarado: "João" }), g.t)).status).toBe(200);
+  });
+});
+
+describe("edição pelo administrador", () => {
+  const edicao = (valores: ReturnType<typeof valoresExemplo>, versaoEsperada: number, extra: Record<string, unknown> = {}) => ({
+    versaoEsperada,
+    motivo: "Comprovante de Pix conferido depois",
+    observacao: "",
+    ...valores,
+    lancamentos: [...valores.lancamentos, lanc("pix", 2500)],
+    confirmacao: { dinheiroLancarCentavos: 70000, totalLancarCentavos: 98000 },
+    ...extra,
+  });
+
+  it("exige sessão ADM, fechamento finalizado, motivo, versão atual e alguma alteração", async () => {
+    const f = await finalizado();
+    expect((await chamar("POST", `/admin/fechamentos/${f.id}/editar`, edicao(f.valores, 1))).status).toBe(401);
+    const a = await admin();
+    expect((await chamar("POST", `/admin/fechamentos/${f.id}/editar`, edicao(f.valores, 1, { motivo: "" }), a)).status).toBe(422);
+    expect((await chamar("POST", `/admin/fechamentos/${f.id}/editar`, edicao(f.valores, 7), a)).corpo.codigo).toBe("VERSAO_DESATUALIZADA");
+    const igual = { ...edicao(f.valores, 1), lancamentos: f.valores.lancamentos, confirmacao: CONFIRMACAO_EXEMPLO };
+    expect((await chamar("POST", `/admin/fechamentos/${f.id}/editar`, igual, a)).corpo.codigo).toBe("SEM_ALTERACOES");
+    const errado = edicao(f.valores, 1, { confirmacao: { dinheiroLancarCentavos: 1, totalLancarCentavos: 1 } });
+    expect((await chamar("POST", `/admin/fechamentos/${f.id}/editar`, errado, a)).corpo.codigo).toBe("CALCULO_DIVERGENTE");
+    const r = await criar({ turno: "manha" });
+    expect((await chamar("POST", `/admin/fechamentos/${r.id}/editar`, edicao(f.valores, 0), a)).corpo.codigo).toBe("NAO_FINALIZADO");
+  });
+
+  it("edita quantas vezes precisar, marca o que mudou, registra no histórico e não consome a correção do funcionário", async () => {
+    const f = await finalizado();
+    const a = await admin();
+    const e1 = await chamar("POST", `/admin/fechamentos/${f.id}/editar`, edicao(f.valores, 1), a);
+    expect(e1.status).toBe(200);
+    expect(e1.corpo.fechamento).toMatchObject({ versao: 2, quantidadeEdicoesAdm: 1, quantidadeCorrecoes: 0 });
+    expect(e1.corpo.fechamento.snapshot.alteradoPeloAdm.sort()).toEqual(["forma:pix", "total"]);
+    expect(e1.corpo.fechamento.snapshot.totalLancarCentavos).toBe(98000);
+
+    // Segunda edição: muda a abertura (dinheiro a lançar 700 → 750) e acumula as marcas.
+    const v2 = { ...f.valores, lancamentos: e1.corpo.fechamento.lancamentos, aberturaCentavos: 15000 };
+    const e2 = await chamar("POST", `/admin/fechamentos/${f.id}/editar`, {
+      versaoEsperada: 2, motivo: "Abertura conferida no cofre", observacao: "Conferido pelo ADM", ...v2,
+      confirmacao: { dinheiroLancarCentavos: 75000, totalLancarCentavos: 103000 },
+    }, a);
+    expect(e2.status).toBe(200);
+    expect(e2.corpo.fechamento).toMatchObject({ versao: 3, quantidadeEdicoesAdm: 2, observacao: "Conferido pelo ADM" });
+    expect(e2.corpo.fechamento.snapshot.alteradoPeloAdm.sort()).toEqual(["abertura", "dinheiroLancar", "forma:pix", "observacao", "total"]);
+
+    // O funcionário ainda tem a correção única; o que ele mexer deixa de ser "do ADM".
+    const atual = e2.corpo.fechamento as Fechamento;
+    const c1 = await chamar("POST", `/fechamentos/${f.id}/corrigir`, {
+      requisicaoId: "req-depois-do-adm", versaoEsperada: 3, autorDeclarado: "Maria Souza", motivo: "Faltou um crédito", observacao: atual.observacao,
+      aberturaCentavos: atual.aberturaCentavos, houveSangria: atual.houveSangria, sangriaCentavos: atual.sangriaCentavos,
+      lancamentos: [...atual.lancamentos, lanc("credito", 1000)],
+      confirmacao: { dinheiroLancarCentavos: 75000, totalLancarCentavos: 104000 },
+    }, f.t);
+    expect(c1.status).toBe(200);
+    expect(c1.corpo.fechamento).toMatchObject({ versao: 4, quantidadeCorrecoes: 1, quantidadeEdicoesAdm: 2 });
+    expect(c1.corpo.fechamento.snapshot.alteradoPeloAdm.sort()).toEqual(["abertura", "dinheiroLancar", "forma:pix", "observacao"]);
+
+    // Mesmo bloqueado para o funcionário, o ADM continua podendo editar.
+    const fim = c1.corpo.fechamento as Fechamento;
+    const e3 = await chamar("POST", `/admin/fechamentos/${f.id}/editar`, {
+      versaoEsperada: 4, motivo: "Ajuste final do ADM", observacao: fim.observacao, aberturaCentavos: fim.aberturaCentavos,
+      houveSangria: fim.houveSangria, sangriaCentavos: fim.sangriaCentavos, lancamentos: fim.lancamentos.slice(1),
+      confirmacao: { dinheiroLancarCentavos: 75000, totalLancarCentavos: 92000 },
+    }, a);
+    expect(e3.status).toBe(200);
+    expect(e3.corpo.fechamento).toMatchObject({ versao: 5, quantidadeEdicoesAdm: 3, quantidadeCorrecoes: 1 });
+
+    const d = await chamar("GET", `/admin/fechamentos/${f.id}`, undefined, a);
+    expect(d.corpo.historico.map((h: any) => h.tipo)).toEqual(["finalizacao", "edicao_adm", "edicao_adm", "correcao", "edicao_adm"]);
+    expect(d.corpo.historico[1]).toMatchObject({ autorDeclarado: "Administrador", motivo: "Comprovante de Pix conferido depois" });
+    expect(d.corpo.fechamento).toEqual(e3.corpo.fechamento);
+    const lista = await chamar("GET", "/admin/fechamentos", undefined, a);
+    expect(lista.corpo.itens[0].quantidadeEdicoesAdm).toBe(3);
+  });
+
+  it("as travas do banco continuam valendo fora da edição do ADM", async () => {
+    const f = await finalizado();
+    await expect(db.query("update fechamentos set quantidade_edicoes_adm = 1, versao = 2 where fechamento_id = $1", [f.id])).rejects.toThrow();
+    await chamar("POST", `/fechamentos/${f.id}/corrigir`, correcao(f.valores), f.t);
+    await expect(db.query("delete from lancamentos where fechamento_id = $1", [f.id])).rejects.toThrow(/bloqueado/);
   });
 });

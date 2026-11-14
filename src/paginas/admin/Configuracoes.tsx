@@ -64,6 +64,15 @@ export function Configuracoes() {
       </section>
 
       <section className="bloco">
+        <h2>Usuários</h2>
+        <p className="nota">
+          Só quem está cadastrado aqui pode abrir ou corrigir um fechamento, e apenas nas lojas marcadas.
+          Usuários desativados continuam nos fechamentos antigos, mas somem da lista de nomes.
+        </p>
+        <Usuarios config={config} ocupado={ocupado} aplicar={aplicar} />
+      </section>
+
+      <section className="bloco">
         <h2>Formas de pagamento</h2>
         <p className="nota">A ordem daqui é a ordem das colunas e do resumo. Renomear não altera fechamentos já finalizados.</p>
         <ListaEditavel
@@ -173,6 +182,97 @@ function ListaEditavel({ itens, ocupado, rotuloNovo, aoAlterar, aoCadastrar, aoM
         <input className="entrada" value={novo} maxLength={60} placeholder={rotuloNovo} aria-label={rotuloNovo} onChange={(e) => setNovo(e.target.value)} />
         <button type="submit" className="botao botao-contorno" disabled={ocupado || !novo.trim()}>Adicionar</button>
       </form>
+    </>
+  );
+}
+
+interface UsuariosProps {
+  config: Config;
+  ocupado: boolean;
+  aplicar(fn: (token: string) => Promise<Config>): Promise<boolean>;
+}
+
+/** Cadastro de usuários (funcionários) com as lojas de cada um e filtro por loja. */
+function Usuarios({ config, ocupado, aplicar }: UsuariosProps) {
+  const [filtro, setFiltro] = useState("");
+  const [nome, setNome] = useState("");
+  const [lojasNovas, setLojasNovas] = useState<string[]>([]);
+  const lojas = config.lojas.filter((l) => l.ativa);
+  const visiveis = config.usuarios.filter((u) => !filtro || u.lojaIds.includes(filtro));
+  const alternar = (lista: string[], id: string) => (lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]);
+  const lojasDoNovo = lojasNovas.length ? lojasNovas : filtro ? [filtro] : [];
+
+  return (
+    <>
+      <label className="campo filtro-usuarios">
+        <span className="campo-rotulo">Mostrar usuários da loja</span>
+        <select className="entrada" value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+          <option value="">Todas as lojas</option>
+          {config.lojas.map((l) => <option key={l.lojaId} value={l.lojaId}>{l.nome}{l.ativa ? "" : " (desativada)"}</option>)}
+        </select>
+      </label>
+      {visiveis.length === 0 && (
+        <p className="vazio">{config.usuarios.length ? "Nenhum usuário nesta loja." : "Nenhum usuário cadastrado ainda. Cadastre abaixo quem faz fechamento em cada loja."}</p>
+      )}
+      <ul className="lista-config lista-usuarios">
+        {visiveis.map((u) => (
+          <li key={u.usuarioId} className={u.ativo ? "" : "inativa"}>
+            <input
+              key={u.nome}
+              className="entrada"
+              defaultValue={u.nome}
+              aria-label={`Nome de ${u.nome}`}
+              maxLength={60}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              onBlur={async (e) => {
+                const campo = e.currentTarget;
+                const novo = campo.value.trim();
+                if (!novo || novo === u.nome || !(await aplicar((t) => api.adm.alterarUsuario(t, u.usuarioId, { nome: novo })))) campo.value = u.nome;
+              }}
+            />
+            <span className="lojas-usuario" role="group" aria-label={`Lojas de ${u.nome}`}>
+              {lojas.map((l) => (
+                <label key={l.lojaId} className="marca-loja">
+                  <input
+                    type="checkbox"
+                    checked={u.lojaIds.includes(l.lojaId)}
+                    disabled={ocupado}
+                    onChange={() => void aplicar((t) => api.adm.alterarUsuario(t, u.usuarioId, { lojaIds: alternar(u.lojaIds, l.lojaId) }))}
+                  />
+                  <span>{l.nome}</span>
+                </label>
+              ))}
+            </span>
+            <label className="chave">
+              <input type="checkbox" checked={u.ativo} disabled={ocupado} onChange={(e) => void aplicar((t) => api.adm.alterarUsuario(t, u.usuarioId, { ativo: e.target.checked }))} />
+              <span>{u.ativo ? "Ativo" : "Desativado"}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="novo-item novo-usuario"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (nome.trim().length < 2 || !lojasDoNovo.length) return;
+          if (await aplicar((t) => api.adm.cadastrarUsuario(t, nome.trim(), lojasDoNovo))) {
+            setNome("");
+            setLojasNovas([]);
+          }
+        }}
+      >
+        <input className="entrada" value={nome} maxLength={60} placeholder="Nome do novo usuário" aria-label="Nome do novo usuário" onChange={(e) => setNome(e.target.value)} />
+        <span className="lojas-usuario" role="group" aria-label="Lojas do novo usuário">
+          {lojas.map((l) => (
+            <label key={l.lojaId} className="marca-loja">
+              <input type="checkbox" checked={lojasDoNovo.includes(l.lojaId)} onChange={() => setLojasNovas(alternar(lojasDoNovo, l.lojaId))} />
+              <span>{l.nome}</span>
+            </label>
+          ))}
+        </span>
+        <button type="submit" className="botao botao-contorno" disabled={ocupado || nome.trim().length < 2 || !lojasDoNovo.length}>Adicionar</button>
+      </form>
+      {nome.trim().length >= 2 && !lojasDoNovo.length && <p className="nota">Marque ao menos uma loja para o novo usuário.</p>}
     </>
   );
 }

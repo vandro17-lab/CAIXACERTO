@@ -109,7 +109,7 @@ describe("resumo e relatórios", () => {
   it("relatório e CSV somam por forma e por loja, só com finalizados", () => {
     const item = {
       id: "a", lojaId: "vila-grill-1", lojaNome: "Vila Grill 1", dataLocal: "2026-11-14", turno: "noite" as const, responsavelNome: "Maria",
-      status: "finalizado" as const, versao: 1, quantidadeCorrecoes: 0, criadoEm: "", finalizadoEm: "",
+      status: "finalizado" as const, versao: 1, quantidadeCorrecoes: 0, quantidadeEdicoesAdm: 0, criadoEm: "", finalizadoEm: "",
       formas: [{ formaId: "credito", nome: "Crédito", subtotalCentavos: 15500 }], dinheiroLancarCentavos: 70000, totalLancarCentavos: 85500,
     };
     const rascunho = { ...item, id: "b", status: "rascunho" as const, formas: [], dinheiroLancarCentavos: null, totalLancarCentavos: null };

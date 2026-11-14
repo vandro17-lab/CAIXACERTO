@@ -91,6 +91,7 @@ export function Novo() {
           <FormIdentificacao
             valor={valor}
             lojas={config.lojas}
+            usuarios={config.usuarios}
             mostrarFaltas={tentou}
             aoMudar={(v) => {
               setValor(v);

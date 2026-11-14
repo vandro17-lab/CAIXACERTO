@@ -4,7 +4,8 @@ import { formatarData, NOME_TURNO } from "@dominio/tipos.ts";
 import type { Fechamento } from "@dominio/tipos.ts";
 import type { Config } from "../api.ts";
 import { Etiqueta, Moldura } from "../componentes/Moldura.tsx";
-import { FormulaDinheiro, ListaLancar } from "../componentes/Resumo.tsx";
+import { Cupom80 } from "../componentes/Cupom80.tsx";
+import { FormulaDinheiro, LegendaAdm, ListaLancar } from "../componentes/Resumo.tsx";
 import { textoResumo } from "../resumoTexto.ts";
 
 export const dataHora = (iso: string) =>
@@ -33,6 +34,8 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
   const s = f.snapshot!;
   const [copiado, setCopiado] = useState<boolean | null>(null);
   const corrigido = f.quantidadeCorrecoes > 0;
+  const editadoAdm = f.quantidadeEdicoesAdm > 0;
+  const situacao = `${f.versao > 1 ? "Alterado" : "Finalizado"} em ${dataHora(f.versao > 1 ? f.atualizadoEm : f.finalizadoEm ?? f.atualizadoEm)}`;
 
   return (
     <Moldura contexto={<>{s.lojaNome} · {formatarData(s.dataLocal)} · {NOME_TURNO[s.turno]}</>}>
@@ -40,23 +43,36 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
         <h1>Fechamento finalizado</h1>
         <div className="etiquetas">
           {corrigido ? <Etiqueta cor="ambar">Corrigido uma vez — bloqueado</Etiqueta> : <Etiqueta cor="verde">Versão {f.versao}</Etiqueta>}
+          {editadoAdm && <Etiqueta cor="azul">Editado pelo administrador</Etiqueta>}
         </div>
       </div>
       <p className="subtitulo">
         {s.lojaNome} · {formatarData(s.dataLocal)} · {NOME_TURNO[s.turno]} · Responsável: {s.responsavelNome}
         <br />
-        {corrigido ? `Corrigido em ${dataHora(f.atualizadoEm)}` : `Finalizado em ${dataHora(f.finalizadoEm ?? f.atualizadoEm)}`} · confirmado pelo servidor
+        {situacao} · confirmado pelo servidor
       </p>
+      <Cupom80
+        dados={{
+          lojaNome: s.lojaNome, dataLocal: s.dataLocal, turno: s.turno, responsavelNome: s.responsavelNome, situacao: `${situacao} (versão ${f.versao})`,
+          avisos: [...(corrigido ? ["Corrigido uma vez pelo funcionário"] : []), ...(editadoAdm ? ["Editado pelo administrador"] : [])],
+          observacao: s.observacao,
+        }}
+        r={s}
+        adm={s.alteradoPeloAdm}
+        mostrarZerados={config.parametros.mostrarZerados}
+        comMemoria={config.parametros.imprimirMemoria}
+      />
 
       <div className="grade-resumo">
-        <ListaLancar r={s} mostrarZerados={config.parametros.mostrarZerados} />
-        <div className={config.parametros.imprimirMemoria ? "" : "nao-imprimir"}>
-          <FormulaDinheiro r={s} />
+        <ListaLancar r={s} mostrarZerados={config.parametros.mostrarZerados} adm={s.alteradoPeloAdm} />
+        <div>
+          <FormulaDinheiro r={s} adm={s.alteradoPeloAdm} />
         </div>
       </div>
+      <LegendaAdm adm={s.alteradoPeloAdm} />
 
       {s.observacao && (
-        <div className="observacao">
+        <div className={`observacao${s.alteradoPeloAdm?.includes("observacao") ? " valor-adm" : ""}`}>
           <h3>Observação</h3>
           <p>{s.observacao}</p>
         </div>
@@ -73,7 +89,7 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
         >
           {copiado ? "Resumo copiado" : "Copiar resumo"}
         </button>
-        <button type="button" className="botao botao-contorno" onClick={() => window.print()}>Imprimir</button>
+        <button type="button" className="botao botao-contorno" onClick={() => window.print()}>Imprimir cupom (80 mm)</button>
         {!corrigido && <Link to={`/f/${f.id}/corrigir`} className="botao botao-contorno">Corrigir fechamento</Link>}
         <Link to="/" className="botao botao-contorno">Voltar ao início</Link>
       </div>

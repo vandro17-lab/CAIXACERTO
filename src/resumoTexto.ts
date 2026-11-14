@@ -16,6 +16,6 @@ export function textoResumo(s: Snapshot, mostrarZerados: boolean): string {
     `Dinheiro: ${formatarReais(s.dinheiroLancarCentavos)}`,
     `TOTAL A LANÇAR: ${formatarReais(s.totalLancarCentavos)}`,
     ...(s.observacao ? ["", `Observação: ${s.observacao}`] : []),
-    ...(s.versao > 1 ? ["", "(Fechamento corrigido uma vez)"] : []),
+    ...(s.versao > 1 ? ["", `(Fechamento alterado após a finalização — versão ${s.versao})`] : []),
   ].join("\n");
 }

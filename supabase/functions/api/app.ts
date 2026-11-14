@@ -23,7 +23,10 @@ const ROTAS: Rota[] = [
   ["POST", /^\/admin\/trocar-senha$/, adm.trocarSenha],
   ["GET", /^\/admin\/fechamentos$/, adm.consultar],
   ["GET", new RegExp(`^/admin/fechamentos/${ID}$`), adm.detalhar],
+  ["POST", new RegExp(`^/admin/fechamentos/${ID}/editar$`), adm.editar],
   ["GET", /^\/admin\/config$/, adm.lerConfig],
+  ["POST", /^\/admin\/usuarios$/, adm.cadastrarUsuario],
+  ["PUT", new RegExp(`^/admin/usuarios/${ID}$`), adm.alterarUsuario],
   ["POST", /^\/admin\/lojas$/, (c) => adm.cadastrar(c, "lojas")],
   ["PUT", new RegExp(`^/admin/lojas/${ID}$`), (c, id) => adm.alterar(c, "lojas", id)],
   ["POST", /^\/admin\/formas-pagamento$/, (c) => adm.cadastrar(c, "formas")],
@@ -32,15 +35,16 @@ const ROTAS: Rota[] = [
   ["PUT", /^\/admin\/parametros$/, adm.salvarParametros],
 ];
 
-/** GET /config — o que a tela de novo fechamento precisa: lojas e formas ativas e parâmetros. */
+/** GET /config — o que a tela de novo fechamento precisa: lojas, formas, usuários ativos e parâmetros. */
 async function config(c: Ctx): Promise<Response> {
-  // As três leituras são independentes: vão ao banco ao mesmo tempo.
-  const [lojas, formas, parametros] = await Promise.all([
+  // As leituras são independentes: vão ao banco ao mesmo tempo.
+  const [lojas, formas, parametros, usuarios] = await Promise.all([
     adm.lojasTodas(c.sql),
     fech.formasTodas(c.sql),
     adm.lerParametros(c.sql),
+    adm.usuariosTodos(c.sql),
   ]);
-  return json(200, { lojas: lojas.filter((l) => l.ativa), formas, parametros });
+  return json(200, { lojas: lojas.filter((l) => l.ativa), formas, parametros, usuarios: usuarios.filter((u) => u.ativo) });
 }
 
 async function lerCorpo(req: Request): Promise<Linha> {

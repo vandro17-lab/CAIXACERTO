@@ -63,3 +63,22 @@ export function pendencias(v: Valores, r: Resumo): string[] {
   }
   return p;
 }
+
+/**
+ * Quais itens mudaram entre dois resultados. Não calcula nada: só compara.
+ * Chaves: `forma:<id>`, `abertura`, `sangria`, `dinheiroContado`, `dinheiroLancar`, `total`, `observacao`.
+ */
+export function diferencas(antes: Resumo & { observacao?: string }, depois: Resumo & { observacao?: string }): string[] {
+  const d: string[] = [];
+  const lista = (r: Resumo, id: string) => JSON.stringify(r.formas.find((f) => f.formaId === id)?.lancamentos ?? []);
+  for (const id of new Set([...antes.formas, ...depois.formas].map((f) => f.formaId))) {
+    if (lista(antes, id) !== lista(depois, id)) d.push(`forma:${id}`);
+  }
+  if (antes.aberturaCentavos !== depois.aberturaCentavos) d.push("abertura");
+  if (antes.sangriaCentavos !== depois.sangriaCentavos) d.push("sangria");
+  if (JSON.stringify(antes.dinheiroContado) !== JSON.stringify(depois.dinheiroContado)) d.push("dinheiroContado");
+  if (antes.dinheiroLancarCentavos !== depois.dinheiroLancarCentavos) d.push("dinheiroLancar");
+  if (antes.totalLancarCentavos !== depois.totalLancarCentavos) d.push("total");
+  if ((antes.observacao ?? "") !== (depois.observacao ?? "")) d.push("observacao");
+  return d;
+}

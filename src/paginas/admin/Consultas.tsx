@@ -210,6 +210,7 @@ export function Consultas() {
                       <td>{i.responsavelNome}</td>
                       <td>
                         {i.status === "rascunho" ? <Etiqueta cor="ambar">Rascunho</Etiqueta> : i.quantidadeCorrecoes > 0 ? <Etiqueta>Corrigido</Etiqueta> : <Etiqueta cor="verde">Finalizado</Etiqueta>}
+                        {i.quantidadeEdicoesAdm > 0 && <> <Etiqueta cor="azul">Editado pelo ADM</Etiqueta></>}
                       </td>
                       <td className="num">{i.dinheiroLancarCentavos === null ? "—" : formatarReais(i.dinheiroLancarCentavos)}</td>
                       <td className="num">{i.totalLancarCentavos === null ? "—" : formatarReais(i.totalLancarCentavos)}</td>

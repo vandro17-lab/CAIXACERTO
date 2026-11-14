@@ -8,6 +8,7 @@ import { api, FalhaApi } from "../api.ts";
 import type { Config } from "../api.ts";
 import { novoId } from "../armazenamento.ts";
 import { CampoMoeda } from "../componentes/CampoMoeda.tsx";
+import { usuariosDaLoja } from "../componentes/FormIdentificacao.tsx";
 import { Aviso, Moldura } from "../componentes/Moldura.tsx";
 import { PainelColunas } from "../componentes/PainelColunas.tsx";
 import { FormulaDinheiro } from "../componentes/Resumo.tsx";
@@ -34,7 +35,8 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
     lancamentos: f.lancamentos,
   });
   const [observacao, setObservacao] = useState(f.observacao);
-  const [autor, setAutor] = useState(f.responsavelNome);
+  const nomes = usuariosDaLoja(config.usuarios, f.lojaId);
+  const [autor, setAutor] = useState(() => nomes.find((n) => n === f.responsavelNome) ?? "");
   const [motivo, setMotivo] = useState("");
   const [ciente, setCiente] = useState(false);
   const [tentou, setTentou] = useState(false);
@@ -99,8 +101,12 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
         <div className="dupla">
           <div className="campo">
             <label className="campo-rotulo" htmlFor="cor-autor">Quem está corrigindo</label>
-            <input id="cor-autor" className={`entrada${tentou && !autorOk ? " com-erro" : ""}`} value={autor} maxLength={60} onChange={(e) => setAutor(e.target.value)} />
-            {tentou && !autorOk && <p className="campo-erro" role="alert">Informe seu nome.</p>}
+            <select id="cor-autor" className={`entrada${tentou && !autorOk ? " com-erro" : ""}`} value={autor} onChange={(e) => setAutor(e.target.value)}>
+              <option value="">Escolha seu nome…</option>
+              {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            {nomes.length === 0 && <p className="campo-erro" role="alert">Nenhum usuário cadastrado para esta loja. Peça ao administrador.</p>}
+            {tentou && !autorOk && nomes.length > 0 && <p className="campo-erro" role="alert">Escolha seu nome.</p>}
           </div>
           <div className="campo">
             <label className="campo-rotulo" htmlFor="cor-motivo">Motivo da correção</label>
