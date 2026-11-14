@@ -148,5 +148,5 @@ export function formatarData(dataLocal: string): string {
 
 /** Compara nomes ignorando maiúsculas, acentos e espaços repetidos. */
 export function normalizarNome(nome: string): string {
-  return nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }

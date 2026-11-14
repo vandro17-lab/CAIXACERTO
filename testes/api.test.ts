@@ -438,3 +438,43 @@ describe("administrador", () => {
     expect(corrigido.formas.find((x: any) => x.formaId === "pix").subtotalCentavos).toBe(12500);
   });
 });
+
+describe("gravação do rascunho em comando único", () => {
+  it("troca os lançamentos: remove, altera, reordena e inclui, e a leitura devolve o mesmo que o salvamento", async () => {
+    const f = await criar();
+    const [a, b, c2] = [lanc("credito", 1000), lanc("pix", 2000), lanc(null, 3000)];
+    const base = { ...ident(), aberturaCentavos: 0, houveSangria: false, sangriaCentavos: 0 };
+    const s1 = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...base, lancamentos: [a, b, c2], revisao: 1 }, f.t);
+    expect(s1.corpo.aplicado).toBe(true);
+    expect(s1.corpo.fechamento.lancamentos).toEqual([a, b, c2]);
+
+    const d = lanc("debito", 4000);
+    const nova = [c2, { ...a, valorCentavos: 1500, formaId: "voucher" }, d]; // b sai, a muda, ordem muda, d entra
+    const s2 = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...base, lancamentos: nova, revisao: 2 }, f.t);
+    expect(s2.corpo.aplicado).toBe(true);
+    expect(s2.corpo.fechamento.revisao).toBe(2);
+    const lido = await chamar("GET", `/fechamentos/${f.id}`, undefined, f.t);
+    expect(lido.corpo.fechamento.lancamentos).toEqual(nova);
+    expect(lido.corpo.fechamento).toEqual(s2.corpo.fechamento);
+
+    // Revisão atrasada não altera nada e devolve o estado atual.
+    const s3 = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...base, lancamentos: [], revisao: 2 }, f.t);
+    expect(s3.corpo.aplicado).toBe(false);
+    expect(s3.corpo.fechamento).toEqual(s2.corpo.fechamento);
+
+    const s4 = await chamar("PUT", `/fechamentos/${f.id}/rascunho`, { ...base, lancamentos: [], revisao: 3 }, f.t);
+    expect(s4.corpo.fechamento.lancamentos).toEqual([]);
+    expect((await db.query("select 1 from lancamentos")).rows).toHaveLength(0);
+  });
+
+  it("finalizar e corrigir devolvem exatamente o que a leitura devolve depois", async () => {
+    const f = await finalizado();
+    const lido1 = await chamar("GET", `/fechamentos/${f.id}`, undefined, f.t);
+    expect(lido1.corpo.fechamento).toEqual(f.fechamento);
+    const r = await chamar("POST", `/fechamentos/${f.id}/corrigir`, correcao(f.valores), f.t);
+    expect(r.status).toBe(200);
+    const lido2 = await chamar("GET", `/fechamentos/${f.id}`, undefined, f.t);
+    expect(lido2.corpo.fechamento).toEqual(r.corpo.fechamento);
+    expect(lido2.corpo.fechamento.lancamentos).toHaveLength(6);
+  });
+});

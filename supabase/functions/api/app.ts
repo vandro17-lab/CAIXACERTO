@@ -34,11 +34,13 @@ const ROTAS: Rota[] = [
 
 /** GET /config — o que a tela de novo fechamento precisa: lojas e formas ativas e parâmetros. */
 async function config(c: Ctx): Promise<Response> {
-  return json(200, {
-    lojas: (await adm.lojasTodas(c.sql)).filter((l) => l.ativa),
-    formas: await fech.formasTodas(c.sql),
-    parametros: await adm.lerParametros(c.sql),
-  });
+  // As três leituras são independentes: vão ao banco ao mesmo tempo.
+  const [lojas, formas, parametros] = await Promise.all([
+    adm.lojasTodas(c.sql),
+    fech.formasTodas(c.sql),
+    adm.lerParametros(c.sql),
+  ]);
+  return json(200, { lojas: lojas.filter((l) => l.ativa), formas, parametros });
 }
 
 async function lerCorpo(req: Request): Promise<Linha> {
