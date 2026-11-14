@@ -1,0 +1,11 @@
+{
+  "name": "Caixa Certo",
+  "short_name": "Caixa Certo",
+  "description": "Fechamento de caixa por loja, data e turno.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ee",
+  "theme_color": "#0e6b4f",
+  "icons": [{ "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
