@@ -5,7 +5,8 @@ import postgres from "npm:postgres@3.4.5";
 import { criarApp } from "./app.ts";
 import type { Sql } from "./infra.ts";
 
-const pg = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, idle_timeout: 20, prepare: false });
+// idle_timeout: a conexão fica aberta entre um salvamento e outro, para não pagar a reconexão a cada pausa.
+const pg = postgres(Deno.env.get("SUPABASE_DB_URL")!, { max: 2, idle_timeout: 120, prepare: false });
 
 const embrulhar = (conexao: any, emTransacao: boolean): Sql => {
   const sql: Sql = {
