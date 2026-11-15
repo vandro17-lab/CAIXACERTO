@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import type { FormEvent } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { montarResumo } from "@dominio/calculo.ts";
 import { formatarNumero, formatarReais } from "@dominio/dinheiro.ts";
 import { formatarData, NOME_TURNO } from "@dominio/tipos.ts";
@@ -19,6 +20,7 @@ export function Detalhe() {
   const { chamar } = useAdm();
   const [d, setD] = useState<{ fechamento: Fechamento; historico: Alteracao[]; formas: Forma[] } | null>(null);
   const [falha, setFalha] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     chamar((t) => api.adm.detalhar(t, id)).then(setD, (e: FalhaApi) => setFalha(e.message));
@@ -48,7 +50,9 @@ export function Detalhe() {
       <div className="acoes nao-imprimir">
         {f.status === "finalizado" && <Link to={`/admin/consultas/${f.id}/editar`} className="botao botao-primario">Editar valores</Link>}
         <button type="button" className="botao botao-contorno" onClick={() => window.print()}>Imprimir cupom (80 mm)</button>
+        <button type="button" className="botao botao-perigo-contorno" onClick={() => setExcluindo(true)} disabled={excluindo}>Excluir fechamento</button>
       </div>
+      {excluindo && <ExcluirFechamento f={f} aoCancelar={() => setExcluindo(false)} />}
       <Cupom80
         dados={{
           lojaNome: f.lojaNome, dataLocal: f.dataLocal, turno: f.turno, responsavelNome: f.responsavelNome,
@@ -129,6 +133,59 @@ export function Detalhe() {
       </ol>
       <p className="nota">O histórico é permanente: cada edição do administrador fica registrada com o motivo, o antes e o depois.</p>
     </MolduraAdm>
+  );
+}
+
+/** Exclusão definitiva, com motivo e a senha do ADM de novo. Uma cópia fica guardada no servidor. */
+function ExcluirFechamento({ f, aoCancelar }: { f: Fechamento; aoCancelar: () => void }) {
+  const { chamar } = useAdm();
+  const navegar = useNavigate();
+  const [motivo, setMotivo] = useState("");
+  const [senha, setSenha] = useState("");
+  const [tentou, setTentou] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [falha, setFalha] = useState<string | null>(null);
+  const motivoValido = motivo.trim().length >= 5;
+  const nome = `${f.lojaNome} · ${formatarData(f.dataLocal)} · ${NOME_TURNO[f.turno]}`;
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault();
+    setTentou(true);
+    if (!motivoValido || !senha) return;
+    setEnviando(true);
+    setFalha(null);
+    try {
+      await chamar((t) => api.adm.excluir(t, f.id, motivo, senha));
+      navegar("/admin/consultas", { replace: true, state: { aviso: `Fechamento excluído: ${nome}.` } });
+    } catch (erro) {
+      setFalha((erro as FalhaApi).message);
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form className="bloco bloco-perigo nao-imprimir" onSubmit={enviar} noValidate>
+      <h2>Excluir este fechamento?</h2>
+      <p>
+        <strong>{nome}</strong> ({f.status === "rascunho" ? "rascunho" : `finalizado, versão ${f.versao}`}) vai sumir das consultas
+        junto com os lançamentos e o histórico. <strong>Não dá para desfazer.</strong> Uma cópia fica guardada no servidor, com o motivo.
+      </p>
+      <div className="campo">
+        <label className="campo-rotulo" htmlFor="exc-motivo">Motivo da exclusão</label>
+        <textarea id="exc-motivo" className="entrada" rows={2} maxLength={500} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: fechamento de teste" />
+        {tentou && !motivoValido && <p className="campo-erro" role="alert">Escreva o motivo (ao menos 5 letras).</p>}
+      </div>
+      <div className="campo">
+        <label className="campo-rotulo" htmlFor="exc-senha">Senha do ADM</label>
+        <input id="exc-senha" className="entrada" type="password" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+        {tentou && !senha && <p className="campo-erro" role="alert">Digite a senha do ADM para confirmar.</p>}
+      </div>
+      {falha && <Aviso tipo="erro">{falha}</Aviso>}
+      <div className="acoes">
+        <button type="submit" className="botao botao-perigo" disabled={enviando}>{enviando ? "Excluindo…" : "Excluir definitivamente"}</button>
+        <button type="button" className="botao botao-contorno" onClick={aoCancelar} disabled={enviando}>Cancelar</button>
+      </div>
+    </form>
   );
 }
 

@@ -136,6 +136,8 @@ export const api = {
     detalhar: (s: string, id: string) =>
       pedir<{ fechamento: Fechamento; historico: Alteracao[]; formas: Forma[] }>("GET", `/admin/fechamentos/${id}`, undefined, a(s)),
     editar: (s: string, id: string, corpo: CorpoEdicaoAdm) => pedir<ComFechamento>("POST", `/admin/fechamentos/${id}/editar`, corpo, a(s)),
+    excluir: (s: string, id: string, motivo: string, senha: string) =>
+      pedir<{ ok: true }>("POST", `/admin/fechamentos/${id}/excluir`, { motivo, senha }, a(s)),
     config: (s: string) => pedir<Config>("GET", "/admin/config", undefined, a(s)),
     cadastrarUsuario: (s: string, nome: string, lojaIds: string[]) => pedir<Config>("POST", "/admin/usuarios", { nome, lojaIds }, a(s)),
     alterarUsuario: (s: string, id: string, mudanca: { nome?: string; ativo?: boolean; lojaIds?: string[] }) =>

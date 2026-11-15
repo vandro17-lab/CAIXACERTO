@@ -39,6 +39,17 @@ Fórmula (regra v1, fiel à planilha `P. CAIXA`):
   apenas o hash bcrypt. Serve só para liberar a abertura; não dá acesso a Consultas nem a Configurações.
   Limite de erros: 5 por fechamento e 15 por aparelho a cada 15 minutos, e 60 por hora no total.
 
+## Exclusão de fechamento pelo administrador
+
+- No detalhe do fechamento (Consultas → abrir), o ADM usa **Excluir fechamento**: escreve o motivo e digita de novo a
+  **senha do ADM**. Vale para rascunho e para finalizado (inclusive corrigido ou editado). Não dá para desfazer.
+- Somem o fechamento, os lançamentos, as chaves de acesso e o histórico. Uma **cópia completa** (com o motivo e a
+  hora) fica na tabela `fechamentos_excluidos`, que não aceita edição nem exclusão. A loja, data e turno ficam livres.
+- Se o excluído era a origem da abertura de outro fechamento: um **rascunho** volta a conferir a abertura contra o
+  novo fechamento anterior; um **finalizado** mantém o valor conferido e só perde a referência.
+- Fora dessa rota (`POST /admin/fechamentos/:id/excluir`), as travas do banco continuam impedindo exclusões.
+  Limite de senha errada: o mesmo do login do ADM (8 a cada 15 minutos).
+
 ## Rodar no computador
 
 ```bash
