@@ -25,6 +25,7 @@ const ROTAS: Rota[] = [
   ["GET", /^\/admin\/fechamentos$/, adm.consultar],
   ["GET", new RegExp(`^/admin/fechamentos/${ID}$`), adm.detalhar],
   ["POST", new RegExp(`^/admin/fechamentos/${ID}/editar$`), adm.editar],
+  ["POST", new RegExp(`^/admin/fechamentos/${ID}/excluir$`), adm.excluir],
   ["GET", /^\/admin\/config$/, adm.lerConfig],
   ["POST", /^\/admin\/usuarios$/, adm.cadastrarUsuario],
   ["PUT", new RegExp(`^/admin/usuarios/${ID}$`), adm.alterarUsuario],

@@ -378,6 +378,36 @@ kbd {
   color: var(--verde);
 }
 
+.botao-perigo {
+  background: var(--vermelho);
+  color: var(--fundo);
+}
+
+.botao-perigo:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.botao-perigo-contorno {
+  background: var(--superficie);
+  border-color: var(--vermelho);
+  color: var(--vermelho);
+}
+
+.botao-perigo-contorno:hover:not(:disabled) {
+  background: var(--vermelho-claro);
+}
+
+.bloco-perigo {
+  padding: 1.25rem;
+  border: 1.5px solid var(--vermelho);
+  border-radius: var(--raio);
+  background: var(--vermelho-claro);
+}
+
+.bloco-perigo > p {
+  margin-bottom: 1rem;
+}
+
 .botao-enorme {
   width: 100%;
   min-height: 4.5rem;

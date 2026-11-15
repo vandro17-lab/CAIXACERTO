@@ -911,3 +911,102 @@ describe("abertura do caixa como conferência", () => {
     expect(noite.corpo.fechamento.abertura.esperadoCentavos).toBe(90000);
   });
 });
+
+describe("exclusão de fechamento pelo administrador", () => {
+  const SENHA_ADM = "caixa-certo-2026";
+  const excluir = (id: string, corpo: Record<string, unknown>, a: Record<string, string> = {}) =>
+    chamar("POST", `/admin/fechamentos/${id}/excluir`, corpo, a);
+  const exclusao = (extra: Record<string, unknown> = {}) => ({ motivo: "Fechamento de teste", senha: SENHA_ADM, ...extra });
+
+  it("exige sessão ADM, motivo e a senha do ADM de novo", async () => {
+    const f = await finalizado();
+    const a = await admin();
+    expect((await excluir(f.id, exclusao())).status).toBe(401);
+    expect((await excluir(f.id, exclusao({ motivo: "" }), a)).status).toBe(422);
+    const errada = await excluir(f.id, exclusao({ senha: "errada" }), a);
+    expect(errada.status).toBe(401);
+    expect(errada.corpo.codigo).toBe("SENHA_ADM_INCORRETA");
+    // A sessão continua valendo depois da senha errada, e nada foi excluído.
+    expect((await chamar("GET", `/admin/fechamentos/${f.id}`, undefined, a)).status).toBe(200);
+    expect((await excluir("nao-existe", exclusao(), a)).status).toBe(404);
+  });
+
+  it("limita as tentativas de senha", async () => {
+    const f = await finalizado();
+    const a = await admin();
+    for (let i = 0; i < 8; i++) await excluir(f.id, exclusao({ senha: `errada-${i}` }), a);
+    expect((await excluir(f.id, exclusao(), a)).status).toBe(429);
+  });
+
+  it("exclui rascunho e finalizado (corrigido e editado), com lançamentos, chaves e histórico; guarda uma cópia", async () => {
+    const f = await finalizado();
+    await chamar("POST", `/fechamentos/${f.id}/corrigir`, correcao(f.valores), f.t);
+    const r = await criar({ turno: "manha" });
+    const a = await admin();
+    const ok = await excluir(f.id, exclusao({ motivo: "  Teste de treinamento  " }), a);
+    expect(ok.status).toBe(200);
+    expect((await excluir(r.id, exclusao(), a)).status).toBe(200);
+
+    expect((await chamar("GET", `/admin/fechamentos/${f.id}`, undefined, a)).status).toBe(404);
+    expect((await chamar("GET", `/fechamentos/${f.id}`, undefined, f.t)).status).toBe(404);
+    expect((await chamar("GET", "/admin/fechamentos", undefined, a)).corpo.itens).toEqual([]);
+    for (const tabela of ["fechamentos", "lancamentos", "fechamento_tokens", "historico_alteracoes"]) {
+      expect((await db.query(`select count(*)::int as n from ${tabela}`)).rows).toEqual([{ n: 0 }]);
+    }
+    const copias = (await db.query<any>("select * from fechamentos_excluidos order by status")).rows;
+    expect(copias.map((c) => [c.status, c.turno, c.motivo])).toEqual([
+      ["finalizado", "noite", "Teste de treinamento"],
+      ["rascunho", "manha", "Fechamento de teste"],
+    ]);
+    const dados = JSON.parse(copias[0].dados_json);
+    expect(dados.fechamento.fechamento_id).toBe(f.id);
+    expect(dados.lancamentos).toHaveLength(6);
+    expect(dados.historico.map((h: any) => h.tipo)).toEqual(["finalizacao", "correcao"]);
+    expect(copias[0].total_lancar_centavos).toBe(98000);
+
+    // A loja, a data e o turno ficam livres para um fechamento novo.
+    expect((await criar()).status).toBe(201);
+  });
+
+  it("quem usava o excluído como origem da abertura: rascunho confere de novo; finalizado guarda o que foi conferido", async () => {
+    const a = await admin();
+    const manha = await finalizado({ turno: "manha" });
+    // Tarde: confere os R$ 850,00 da manhã e finaliza com R$ 900,00 na gaveta.
+    const tarde = await criar({ turno: "tarde" });
+    expect((await chamar("POST", `/fechamentos/${tarde.id}/abertura`, { confere: true, esperadoCentavos: 85000 }, tarde.t)).status).toBe(200);
+    const valoresTarde = { aberturaCentavos: null, houveSangria: false, sangriaCentavos: 0, lancamentos: [lanc("pix", 10000), lanc(null, 90000)] };
+    await chamar("PUT", `/fechamentos/${tarde.id}/rascunho`, { ...ident({ turno: "tarde" }), ...valoresTarde, revisao: 1 }, tarde.t);
+    const fimTarde = await chamar("POST", `/fechamentos/${tarde.id}/finalizar`, { revisao: 1, confirmacao: { dinheiroLancarCentavos: 5000, totalLancarCentavos: 15000 } }, tarde.t);
+    expect(fimTarde.status).toBe(200);
+    // Noite: rascunho com a abertura conferida contra os R$ 900,00 da tarde.
+    const noite = await criar({ turno: "noite" });
+    expect((await chamar("POST", `/fechamentos/${noite.id}/abertura`, { confere: true, esperadoCentavos: 90000 }, noite.t)).status).toBe(200);
+
+    // Exclui a tarde: a noite volta a conferir, agora contra a manhã.
+    expect((await excluir(tarde.id, exclusao(), a)).status).toBe(200);
+    const n = await chamar("GET", `/fechamentos/${noite.id}`, undefined, noite.t);
+    expect(n.corpo.fechamento.abertura).toMatchObject({ situacao: "pendente", esperadoCentavos: 85000, origem: { dataLocal: HOJE, turno: "manha" } });
+    expect(n.corpo.fechamento.aberturaCentavos).toBeNull();
+
+    // Noite confere e finaliza; depois a manhã é excluída: a noite continua com a conferência registrada.
+    expect((await chamar("POST", `/fechamentos/${noite.id}/abertura`, { confere: true, esperadoCentavos: 85000 }, noite.t)).status).toBe(200);
+    await chamar("PUT", `/fechamentos/${noite.id}/rascunho`, { ...ident({ turno: "noite" }), ...valoresTarde, revisao: 1 }, noite.t);
+    const fimNoite = await chamar("POST", `/fechamentos/${noite.id}/finalizar`, { revisao: 1, confirmacao: { dinheiroLancarCentavos: 5000, totalLancarCentavos: 15000 } }, noite.t);
+    expect(fimNoite.status).toBe(200);
+    expect((await excluir(manha.id, exclusao(), a)).status).toBe(200);
+    const d = await chamar("GET", `/admin/fechamentos/${noite.id}`, undefined, a);
+    expect(d.corpo.fechamento).toMatchObject({ versao: 1, aberturaCentavos: 85000, abertura: { situacao: "sim", esperadoCentavos: 85000, origem: null } });
+    expect(d.corpo.historico).toHaveLength(1);
+  });
+
+  it("fora da exclusão do ADM, as travas do banco continuam valendo, e o registro de exclusões é imutável", async () => {
+    const f = await finalizado();
+    const a = await admin();
+    await expect(db.query("delete from fechamentos")).rejects.toThrow(/não podem ser excluídos/);
+    await expect(db.query("delete from historico_alteracoes")).rejects.toThrow(/imutável/);
+    await expect(db.query("update fechamentos set abertura_origem_id = null, total_lancar_centavos = 1")).rejects.toThrow();
+    expect((await excluir(f.id, exclusao(), a)).status).toBe(200);
+    await expect(db.query("update fechamentos_excluidos set motivo = 'outro motivo'")).rejects.toThrow(/imutável/);
+    await expect(db.query("delete from fechamentos_excluidos")).rejects.toThrow(/imutável/);
+  });
+});

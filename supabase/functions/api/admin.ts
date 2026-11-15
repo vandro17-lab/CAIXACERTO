@@ -191,6 +191,61 @@ export async function editar(c: Ctx, id: string): Promise<Response> {
   return editarComoAdm(c, id);
 }
 
+/**
+ * POST /admin/fechamentos/:id/excluir { motivo, senha } — exclui de vez um fechamento (rascunho ou finalizado),
+ * com seus lançamentos, chaves de acesso e histórico. Pede de novo a senha do ADM. Uma cópia completa, com o motivo,
+ * fica em `fechamentos_excluidos`. Quem usava este fechamento como origem da abertura perde só a referência;
+ * um rascunho que tinha a abertura conferida contra ele volta a conferir contra o novo anterior.
+ */
+export async function excluir(c: Ctx, id: string): Promise<Response> {
+  const s = await exigirAdmin(c);
+  const motivo = texto(c.corpo.motivo, "Motivo da exclusão", 5, 500);
+  const senha = typeof c.corpo.senha === "string" ? c.corpo.senha.slice(0, 200) : "";
+  await limitar(c.sql, `login:${c.ip}`, 8, 900);
+  if (!(await c.deps.conferirSenha(senha, s.senhaHash))) {
+    throw new ErroHttp(401, "SENHA_ADM_INCORRETA", "A senha do administrador não confere.", { campo: "Senha do ADM" });
+  }
+  await c.sql.q("delete from limites where chave = $1::text", [`login:${c.ip}`]);
+  await c.sql.tx(async (t) => {
+    // Libera as travas do banco só nesta transação.
+    await t.q("select set_config('cc.exclusao_adm', '1', true) as ok");
+    const [f] = await t.q(
+      `select f.*, l.nome as loja_nome from fechamentos f join lojas l on l.loja_id = f.loja_id
+       where f.fechamento_id = $1::text for update of f`,
+      [id],
+    );
+    if (!f) throw new ErroHttp(404, "NAO_ENCONTRADO", "Fechamento não encontrado. Talvez já tenha sido excluído.");
+    const [d] = await t.q(
+      `select json_build_object(
+         'fechamento', (select row_to_json(x) from fechamentos x where x.fechamento_id = $1::text),
+         'lancamentos', (select coalesce(json_agg(row_to_json(x) order by x.ordem), '[]'::json) from lancamentos x where x.fechamento_id = $1::text),
+         'historico', (select coalesce(json_agg(row_to_json(x) order by x.versao_nova), '[]'::json) from historico_alteracoes x where x.fechamento_id = $1::text)
+       )::text as dados`,
+      [id],
+    );
+    await t.q(
+      `insert into fechamentos_excluidos (exclusao_id, fechamento_id, loja_id, loja_nome, data_local, turno,
+         responsavel_nome, status, total_lancar_centavos, motivo, dados_json)
+       values ($1::text, $2::text, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text, $9::int, $10::text, $11::text)`,
+      [novoId(), id, f.loja_id, f.loja_nome, f.data_local, f.turno, f.responsavel_nome, f.status, f.total_lancar_centavos, motivo, d.dados],
+    );
+    // Rascunho conferido contra este fechamento: a conferência é refeita contra o novo anterior.
+    await t.q(
+      `update fechamentos set abertura_conferida = null, abertura_esperada_centavos = null, abertura_origem_id = null,
+         abertura_centavos = null, atualizado_em = now()
+       where abertura_origem_id = $1::text and status = 'rascunho'`,
+      [id],
+    );
+    // Finalizado: guarda o que foi conferido; só perde a referência ao fechamento excluído.
+    await t.q("update fechamentos set abertura_origem_id = null where abertura_origem_id = $1::text", [id]);
+    await t.q("delete from lancamentos where fechamento_id = $1::text", [id]);
+    await t.q("delete from fechamento_tokens where fechamento_id = $1::text", [id]);
+    await t.q("delete from historico_alteracoes where fechamento_id = $1::text", [id]);
+    await t.q("delete from fechamentos where fechamento_id = $1::text", [id]);
+  });
+  return json(200, { ok: true });
+}
+
 // ---- configurações --------------------------------------------------------
 
 export async function lerParametros(s: Sql): Promise<Parametros> {

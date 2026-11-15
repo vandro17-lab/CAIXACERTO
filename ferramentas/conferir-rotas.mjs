@@ -3,7 +3,7 @@
 const API = process.argv[2] ?? "https://nmhufcovdhtryjmcqstj.supabase.co/functions/v1/api";
 const X = "00000000-0000-0000-0000-000000000000";
 const rotas = [["GET","/config"],["POST","/fechamentos"],["GET",`/fechamentos/${X}`],["POST",`/fechamentos/${X}/acesso`],["PUT",`/fechamentos/${X}/rascunho`],["POST",`/fechamentos/${X}/abertura`],["POST",`/fechamentos/${X}/finalizar`],["POST",`/fechamentos/${X}/corrigir`],
-["POST","/admin/sessao"],["GET","/admin/sessao"],["DELETE","/admin/sessao"],["POST","/admin/sessoes/encerrar"],["POST","/admin/trocar-senha"],["GET","/admin/fechamentos"],["GET",`/admin/fechamentos/${X}`],["POST",`/admin/fechamentos/${X}/editar`],["GET","/admin/config"],["POST","/admin/usuarios"],["PUT","/admin/usuarios/u_x"],["POST","/admin/lojas"],["PUT","/admin/lojas/x"],["POST","/admin/formas-pagamento"],["PUT","/admin/formas-pagamento/x"],["PUT","/admin/formas-pagamento-ordem"],["PUT","/admin/parametros"],["PUT","/admin/senha-gerente"]];
+["POST","/admin/sessao"],["GET","/admin/sessao"],["DELETE","/admin/sessao"],["POST","/admin/sessoes/encerrar"],["POST","/admin/trocar-senha"],["GET","/admin/fechamentos"],["GET",`/admin/fechamentos/${X}`],["POST",`/admin/fechamentos/${X}/editar`],["POST",`/admin/fechamentos/${X}/excluir`],["GET","/admin/config"],["POST","/admin/usuarios"],["PUT","/admin/usuarios/u_x"],["POST","/admin/lojas"],["PUT","/admin/lojas/x"],["POST","/admin/formas-pagamento"],["PUT","/admin/formas-pagamento/x"],["PUT","/admin/formas-pagamento-ordem"],["PUT","/admin/parametros"],["PUT","/admin/senha-gerente"]];
 let ruim = 0;
 for (const [m, p] of rotas) {
   const r = await fetch(API + p, { method: m, headers: { "content-type": "application/json" }, body: m === "GET" || m === "DELETE" ? undefined : "{}" });

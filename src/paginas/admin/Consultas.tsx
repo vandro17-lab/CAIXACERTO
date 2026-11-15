@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { formatarNumero, formatarReais } from "@dominio/dinheiro.ts";
 import { formatarData, NOME_TURNO, TURNOS } from "@dominio/tipos.ts";
 import type { ItemConsulta, Loja } from "@dominio/tipos.ts";
@@ -76,6 +76,8 @@ export function montarCsv(itens: ItemConsulta[]): string {
 
 export function Consultas() {
   const { chamar } = useAdm();
+  // Aviso deixado por outra tela (ex.: "Fechamento excluído").
+  const aviso = (useLocation().state as { aviso?: string } | null)?.aviso;
   const [filtros, setFiltros] = useState(filtrosIniciais);
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [resultado, setResultado] = useState<{ itens: ItemConsulta[]; truncado: boolean } | null>(null);
@@ -115,6 +117,7 @@ export function Consultas() {
   return (
     <MolduraAdm>
       <h1>Consultas</h1>
+      {aviso && <Aviso tipo="ok">{aviso}</Aviso>}
       <form
         className="filtros nao-imprimir"
         onSubmit={(e) => {
