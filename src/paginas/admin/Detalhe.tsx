@@ -70,7 +70,7 @@ export function Detalhe() {
         <div>
           <FormulaDinheiro r={r} adm={adm} />
           <p className="nota">
-            Fórmula aplicada (regra v1, fiel à planilha): Dinheiro a lançar = Dinheiro contado − (Abertura − Sangria de troco).
+            Como é calculado: Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco).
           </p>
         </div>
       </div>
@@ -97,7 +97,7 @@ export function Detalhe() {
               </tr>
             ))}
             <tr className={marcaAdm("dinheiroContado")}>
-              <td>Dinheiro contado</td>
+              <td>Dinheiro da gaveta</td>
               <td className="valores">{r.dinheiroContado.length ? r.dinheiroContado.map(formatarNumero).join("  ·  ") : "—"}</td>
               <td className="num">{formatarReais(r.dinheiroContadoCentavos)}</td>
             </tr>
@@ -140,7 +140,7 @@ function Comparacao({ antes, depois }: { antes: Snapshot; depois: Snapshot }) {
     ]),
     ["Abertura", antes.aberturaCentavos, depois.aberturaCentavos],
     ["Sangria de troco", antes.sangriaCentavos, depois.sangriaCentavos],
-    ["Dinheiro contado", antes.dinheiroContadoCentavos, depois.dinheiroContadoCentavos],
+    ["Dinheiro da gaveta", antes.dinheiroContadoCentavos, depois.dinheiroContadoCentavos],
     ["Dinheiro a lançar", antes.dinheiroLancarCentavos, depois.dinheiroLancarCentavos],
     ["Total a lançar", antes.totalLancarCentavos, depois.totalLancarCentavos],
   ];

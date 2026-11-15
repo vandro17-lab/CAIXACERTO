@@ -52,7 +52,7 @@ export function FormulaDinheiro({ r, titulo = "Memória do cálculo", adm }: { r
     <div className="memoria">
       <h3>{titulo}</h3>
       <dl className="memoria-linhas">
-        <div className={doAdm(adm, "dinheiroContado")}><dt><span className="sinal" /> Dinheiro contado</dt><dd>{formatarReais(r.dinheiroContadoCentavos)}</dd></div>
+        <div className={doAdm(adm, "dinheiroContado")}><dt><span className="sinal" /> Dinheiro da gaveta</dt><dd>{formatarReais(r.dinheiroContadoCentavos)}</dd></div>
         <div className={doAdm(adm, "abertura")}><dt><span className="sinal">−</span> Abertura</dt><dd>{formatarReais(r.aberturaCentavos)}</dd></div>
         <div className={doAdm(adm, "sangria")}><dt><span className="sinal">+</span> Sangria de troco</dt><dd>{formatarReais(r.sangriaCentavos)}</dd></div>
         <div className={`memoria-resultado${negativo ? " negativo" : ""}${doAdm(adm, "dinheiroLancar")}`}>
@@ -60,7 +60,7 @@ export function FormulaDinheiro({ r, titulo = "Memória do cálculo", adm }: { r
           <dd>{formatarReais(r.dinheiroLancarCentavos)}</dd>
         </div>
       </dl>
-      <p className="memoria-nota">Abertura, sangria e dinheiro contado servem só para este cálculo: não são somados de novo ao total.</p>
+      <p className="memoria-nota">Abertura, sangria e dinheiro da gaveta servem só para este cálculo: não são somados de novo ao total.</p>
     </div>
   );
 }

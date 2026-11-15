@@ -9,18 +9,18 @@ const DINHEIRO = "__dinheiro";
 interface Props {
   /** Formas de pagamento exibidas como colunas. */
   formas: Forma[];
-  /** Mostra também a coluna "Dinheiro contado" (usado na correção). */
+  /** Mostra também a coluna "Dinheiro da gaveta" (usado na correção). */
   comDinheiro?: boolean;
   lancamentos: Lancamento[];
   aoMudar(fn: (atuais: Lancamento[]) => Lancamento[]): void;
   autoFocus?: boolean;
 }
 
-/** As colunas lado a lado, como na planilha. No celular, uma coluna por vez, escolhida nas abas. */
+/** As colunas lado a lado, uma por forma de pagamento. No celular, uma coluna por vez, escolhida nas abas. */
 export function PainelColunas({ formas, comDinheiro, lancamentos, aoMudar, autoFocus }: Props) {
   const colunas = [
     ...formas.map((f) => ({ chave: f.formaId, titulo: f.nome, formaId: f.formaId as string | null })),
-    ...(comDinheiro ? [{ chave: DINHEIRO, titulo: "Dinheiro contado", formaId: null }] : []),
+    ...(comDinheiro ? [{ chave: DINHEIRO, titulo: "Dinheiro da gaveta", formaId: null }] : []),
   ];
   const [ativa, setAtiva] = useState(colunas[0]?.chave ?? "");
   const itensDe = (formaId: string | null) =>

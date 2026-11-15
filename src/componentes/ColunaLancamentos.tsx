@@ -15,7 +15,7 @@ interface Props {
 }
 
 /**
- * Uma coluna da planilha: lançamentos individuais, uma linha vazia no fim e subtotal automático.
+ * Uma coluna de lançamentos: lançamentos individuais, uma linha vazia no fim e subtotal automático.
  * Enter com valor válido adiciona UM lançamento e mantém o foco; Enter vazio não faz nada.
  */
 export function ColunaLancamentos({ titulo, itens, aoAdicionar, aoEditar, aoRemover, dinheiro, autoFocus, className = "" }: Props) {
