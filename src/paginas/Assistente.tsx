@@ -135,7 +135,7 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
         <section>
           <h1>Identificação</h1>
           <p className="subtitulo">Enquanto o fechamento está em rascunho, estes dados podem ser ajustados.</p>
-          <FormIdentificacao valor={dados} lojas={config.lojas} mostrarFaltas={tentou} aoMudar={(v) => alterar((d) => ({ ...d, ...v }))} />
+          <FormIdentificacao valor={dados} lojas={config.lojas} usuarios={config.usuarios} mostrarFaltas={tentou} aoMudar={(v) => alterar((d) => ({ ...d, ...v }))} />
         </section>
       )}
 

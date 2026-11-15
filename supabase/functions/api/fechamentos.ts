@@ -1,6 +1,6 @@
 // Rotas operacionais (sem login): rascunho, finalização e correção única.
 // Todas as regras são conferidas aqui de novo — o navegador nunca é a fonte da verdade.
-import { montarResumo, pendencias, REGRA_CALCULO } from "./dominio/calculo.ts";
+import { diferencas, montarResumo, pendencias, REGRA_CALCULO } from "./dominio/calculo.ts";
 import { MAX_CENTAVOS } from "./dominio/dinheiro.ts";
 import { ehTurno, normalizarNome } from "./dominio/tipos.ts";
 import type { Fechamento, Forma, Lancamento, Resumo, Snapshot, Valores } from "./dominio/tipos.ts";
@@ -59,6 +59,7 @@ function paraDto(l: Linha, lancamentos: Lancamento[] = lancamentosDe(l)): Fecham
     status: l.status,
     versao: l.versao,
     quantidadeCorrecoes: l.quantidade_correcoes,
+    quantidadeEdicoesAdm: l.quantidade_edicoes_adm,
     revisao: l.revisao,
     criadoEm: iso(l.criado_em)!,
     finalizadoEm: iso(l.finalizado_em),
@@ -205,9 +206,24 @@ async function erroExistente(s: Sql, lojaId: string, dataLocal: string, turno: s
   });
 }
 
-async function exigirLojaAtiva(s: Sql, lojaId: string): Promise<void> {
-  const [loja] = await s.q("select 1 as ok from lojas where loja_id = $1::text and ativa", [lojaId]);
-  if (!loja) throw new ErroHttp(422, "DADOS_INVALIDOS", "Loja: escolha uma loja ativa.", { campo: "Loja" });
+/**
+ * Confere, em uma consulta, que a loja está ativa e que o nome é de um usuário ativo cadastrado
+ * para ela. Devolve o nome como está no cadastro.
+ */
+async function exigirUsuarioDaLoja(s: Sql, lojaId: string, nome: string, campo: string, lojaPrecisaEstarAtiva = true): Promise<string> {
+  const [r] = await s.q(
+    `select exists (select 1 from lojas where loja_id = $1::text and ativa) as loja_ativa,
+       (select u.nome from usuarios u join usuario_lojas ul on ul.usuario_id = u.usuario_id
+        where ul.loja_id = $1::text and u.ativo and lower(u.nome) = lower($2::text)) as usuario`,
+    [lojaId, nome],
+  );
+  if (lojaPrecisaEstarAtiva && !r.loja_ativa) {
+    throw new ErroHttp(422, "DADOS_INVALIDOS", "Loja: escolha uma loja ativa.", { campo: "Loja" });
+  }
+  if (!r.usuario) {
+    throw new ErroHttp(422, "USUARIO_NAO_CADASTRADO", `${campo}: escolha um usuário cadastrado para esta loja.`, { campo });
+  }
+  return r.usuario as string;
 }
 
 const tokenDoCorpo = (b: Linha): string => {
@@ -224,7 +240,7 @@ export async function criar(c: Ctx): Promise<Response> {
   const ident = validarIdentificacao(c.corpo);
   const tokenHash = await sha256(tokenDoCorpo(c.corpo));
   await limitar(c.sql, `criar:${c.ip}`, 60, 3600);
-  await exigirLojaAtiva(c.sql, ident.lojaId);
+  ident.responsavelNome = await exigirUsuarioDaLoja(c.sql, ident.lojaId, ident.responsavelNome, "Nome do responsável");
   const id = novoId();
   const r = await c.sql.tx(async (s) => {
     const criado = await s.q(
@@ -286,8 +302,13 @@ export async function salvarRascunho(c: Ctx, id: string): Promise<Response> {
     }
     // Chegou atrasado: o servidor já tem esta revisão ou outra mais nova.
     if (revisao <= l.revisao) return { aplicado: false, fechamento: paraDto(l) };
+    if (ident.responsavelNome !== l.responsavel_nome && ident.lojaId === l.loja_id) {
+      ident.responsavelNome = await exigirUsuarioDaLoja(s, ident.lojaId, ident.responsavelNome, "Nome do responsável", false);
+    }
     if (ident.lojaId !== l.loja_id || ident.dataLocal !== l.data_local || ident.turno !== l.turno) {
-      if (ident.lojaId !== l.loja_id) await exigirLojaAtiva(s, ident.lojaId);
+      if (ident.lojaId !== l.loja_id) {
+        ident.responsavelNome = await exigirUsuarioDaLoja(s, ident.lojaId, ident.responsavelNome, "Nome do responsável");
+      }
       const [outro] = await s.q(
         `select 1 as ok from fechamentos where loja_id = $1::text and data_local = $2::text and turno = $3::text
          and fechamento_id <> $4::text`,
@@ -385,6 +406,11 @@ export async function corrigir(c: Ctx, id: string): Promise<Response> {
     if (essencia(antes) === essencia(depois)) {
       throw new ErroHttp(422, "SEM_ALTERACOES", "Nenhum valor foi alterado. A correção única não foi consumida.");
     }
+    const autorCadastrado = await exigirUsuarioDaLoja(s, l.loja_id, autor, "Quem está corrigindo", false);
+    // O que o funcionário alterou agora deixa de contar como valor definido pelo administrador.
+    const mudou = diferencas(antes, depois);
+    const doAdm = (antes.alteradoPeloAdm ?? []).filter((k) => !mudou.includes(k));
+    if (doAdm.length) depois.alteradoPeloAdm = doAdm;
     // Os lançamentos são gravados antes, em comando próprio: depois da correção o banco bloqueia alterá-los.
     await s.q(`${COM_LANCAMENTOS} select 1 as ok`, [id, jsonLancamentos(v.lancamentos)]);
     const [novo] = await s.q(
@@ -400,9 +426,58 @@ export async function corrigir(c: Ctx, id: string): Promise<Response> {
        where f.fechamento_id = $1::text and f.status = 'finalizado' and f.quantidade_correcoes = 0 returning f.*`,
       [id, observacao, v.aberturaCentavos, v.houveSangria, r.sangriaCentavos, r.dinheiroContadoCentavos,
         r.dinheiroLancarCentavos, r.totalLancarCentavos, JSON.stringify(depois), novoId(), l.versao, l.snapshot_json,
-        autor, motivo, requisicaoId],
+        autorCadastrado, motivo, requisicaoId],
     );
     if (!novo) throw new Error("Correção não aplicada: o fechamento mudou durante a transação.");
+    return paraDto({ ...novo, loja_nome: l.loja_nome }, v.lancamentos);
+  });
+  return json(200, { fechamento });
+}
+
+/**
+ * Edição de um fechamento finalizado pelo administrador (a sessão ADM é conferida por quem chama).
+ * Não tem limite de quantidade e não consome a correção única do funcionário. Cada edição gera
+ * uma nova versão no histórico, e os itens alterados ficam marcados em `alteradoPeloAdm`.
+ */
+export async function editarComoAdm(c: Ctx, id: string): Promise<Response> {
+  const b = c.corpo;
+  const fechamento = await c.sql.tx(async (s) => {
+    // Libera as travas do banco só nesta transação.
+    await s.q("select set_config('cc.edicao_adm', '1', true) as ok");
+    const l = await buscar(s, id, true);
+    const motivo = texto(b.motivo, "Motivo da edição", 5, 500);
+    const observacao = textoLongo(b.observacao, "Observação", 2000);
+    const formas = formasDe(l);
+    const v = validarValores(b, formas);
+    if (l.status !== "finalizado") {
+      throw new ErroHttp(409, "NAO_FINALIZADO", "Só é possível editar um fechamento finalizado.");
+    }
+    if (b.versaoEsperada !== l.versao) {
+      throw new ErroHttp(409, "VERSAO_DESATUALIZADA", "O fechamento mudou desde que você abriu a edição. Recarregue a página.");
+    }
+    const r = montarResumo(v, formas);
+    conferirCalculo(b, v, r);
+    const antes: Snapshot = JSON.parse(l.snapshot_json);
+    const depois = montarSnapshot(l, v, r, l.versao + 1, observacao);
+    const mudou = diferencas(antes, depois);
+    if (!mudou.length) throw new ErroHttp(422, "SEM_ALTERACOES", "Nenhum valor foi alterado.");
+    depois.alteradoPeloAdm = [...new Set([...(antes.alteradoPeloAdm ?? []), ...mudou])];
+    await s.q(`${COM_LANCAMENTOS} select 1 as ok`, [id, jsonLancamentos(v.lancamentos)]);
+    const [novo] = await s.q(
+      `with historico as (
+         insert into historico_alteracoes (auditoria_id, fechamento_id, tipo, versao_anterior, versao_nova,
+           snapshot_antes_json, snapshot_depois_json, autor_declarado, motivo)
+         values ($10::text, $1::text, 'edicao_adm', $11::int, $11::int + 1, $12::text, $9::text, 'Administrador', $13::text)
+       )
+       update fechamentos f set versao = versao + 1, quantidade_edicoes_adm = quantidade_edicoes_adm + 1,
+         observacao = $2::text, abertura_centavos = $3::int, houve_sangria = $4::boolean, sangria_centavos = $5::int,
+         dinheiro_contado_centavos = $6::int, dinheiro_lancar_centavos = $7::int, total_lancar_centavos = $8::int,
+         snapshot_json = $9::text, atualizado_em = now()
+       where f.fechamento_id = $1::text and f.status = 'finalizado' returning f.*`,
+      [id, observacao, v.aberturaCentavos, v.houveSangria, r.sangriaCentavos, r.dinheiroContadoCentavos,
+        r.dinheiroLancarCentavos, r.totalLancarCentavos, JSON.stringify(depois), novoId(), l.versao, l.snapshot_json, motivo],
+    );
+    if (!novo) throw new Error("Edição não aplicada: o fechamento mudou durante a transação.");
     return paraDto({ ...novo, loja_nome: l.loja_nome }, v.lancamentos);
   });
   return json(200, { fechamento });

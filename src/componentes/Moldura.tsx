@@ -43,7 +43,7 @@ export function Aviso({ tipo, children }: { tipo: "erro" | "alerta" | "info" | "
   );
 }
 
-export function Etiqueta({ cor = "neutra", children }: { cor?: "neutra" | "verde" | "ambar" | "vermelha"; children: ReactNode }) {
+export function Etiqueta({ cor = "neutra", children }: { cor?: "neutra" | "verde" | "ambar" | "vermelha" | "azul"; children: ReactNode }) {
   return <span className={`etiqueta etiqueta-${cor}`}>{children}</span>;
 }
 

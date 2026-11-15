@@ -3,6 +3,7 @@ import { ProvedorAdm, RotaAdm } from "./adm.tsx";
 import { Configuracoes } from "./paginas/admin/Configuracoes.tsx";
 import { Consultas } from "./paginas/admin/Consultas.tsx";
 import { Detalhe } from "./paginas/admin/Detalhe.tsx";
+import { EdicaoAdm } from "./paginas/admin/EdicaoAdm.tsx";
 import { Entrar, TrocarSenha } from "./paginas/admin/Entrar.tsx";
 import { PaginaFechamento } from "./paginas/Fechamento.tsx";
 import { Inicio } from "./paginas/Inicio.tsx";
@@ -20,6 +21,7 @@ export function App() {
           <Route path="/admin/trocar-senha" element={<TrocarSenha />} />
           <Route path="/admin/consultas" element={<RotaAdm><Consultas /></RotaAdm>} />
           <Route path="/admin/consultas/:id" element={<RotaAdm><Detalhe /></RotaAdm>} />
+          <Route path="/admin/consultas/:id/editar" element={<RotaAdm><EdicaoAdm /></RotaAdm>} />
           <Route path="/admin/configuracoes" element={<RotaAdm><Configuracoes /></RotaAdm>} />
           <Route path="*" element={<Navigate replace to="/" />} />
         </Routes>

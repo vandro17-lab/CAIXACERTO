@@ -1460,6 +1460,173 @@ textarea.entrada {
   }
 }
 
+/* ---- edição do administrador: valores em outra cor ----------------------- */
+
+.etiqueta-azul {
+  background: var(--azul-claro);
+  color: var(--azul);
+}
+
+.valor-adm,
+.valor-adm dt,
+.valor-adm dd,
+.cupom-linha.valor-adm small {
+  color: var(--azul);
+  font-weight: 700;
+}
+
+.tabela tr.valor-adm td {
+  background: var(--azul-claro);
+  color: var(--azul);
+  font-weight: 700;
+}
+
+.observacao.valor-adm {
+  border-color: var(--azul);
+  background: var(--azul-claro);
+}
+
+.legenda-adm {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--tinta-suave);
+}
+
+.cartao-adm {
+  border-left: 4px solid var(--azul);
+}
+
+/* ---- cadastro de usuários ------------------------------------------------ */
+
+.filtro-usuarios {
+  max-width: 22rem;
+  margin-bottom: 0.75rem;
+}
+
+.lista-usuarios li,
+.novo-usuario {
+  flex-wrap: wrap;
+}
+
+.lojas-usuario {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  align-items: center;
+  flex: 1 1 14rem;
+}
+
+.marca-loja {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.marca-loja input {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--verde);
+}
+
+/* ---- cupom para impressora térmica de 80 mm (Epson TM-T20) --------------- */
+
+/* Na tela o cupom fica fora da vista, mas com a largura real, para a altura poder ser medida. */
+.cupom80 {
+  position: absolute;
+  left: -200vw;
+  top: 0;
+  width: 72mm; /* área imprimível da bobina de 80 mm */
+  padding: 2mm 2mm 4mm;
+  background: #fff;
+  color: #000;
+  font: 600 10.5pt/1.3 Arial, Helvetica, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.cupom80 p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cupom80 hr {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 1.5mm 0;
+}
+
+.c80-centro {
+  text-align: center;
+}
+
+.c80-forte {
+  font-weight: 800;
+}
+
+.c80-grande {
+  font-size: 12pt;
+}
+
+.c80-linha.c80-grande span {
+  white-space: nowrap;
+}
+
+.c80-pequeno {
+  font-size: 8.5pt;
+  margin-top: 2mm !important;
+}
+
+.c80-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+}
+
+.c80-linha span:last-child {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.c80-grupo {
+  margin-top: 1mm;
+}
+
+.c80-valores {
+  font-weight: 500;
+  font-size: 9.5pt;
+  padding-left: 2mm;
+}
+
+.c80-observacao {
+  white-space: pre-wrap;
+}
+
+.c80-assinatura {
+  margin-top: 11mm !important;
+  border-top: 1px solid #000;
+  text-align: center;
+  font-size: 9pt;
+}
+
+@media print {
+  /* Quando a tela tem cupom, só ele vai para o papel. */
+  html.imprime-cupom,
+  html.imprime-cupom body {
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  html.imprime-cupom #raiz {
+    display: none !important;
+  }
+
+  html.imprime-cupom .cupom80 {
+    position: static;
+  }
+}
+
 /* ---- ajustes finos de espaçamento --------------------------------------- */
 
 .nota + .lista-config,

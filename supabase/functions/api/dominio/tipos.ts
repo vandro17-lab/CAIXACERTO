@@ -26,6 +26,14 @@ export interface Forma {
   ativa: boolean;
 }
 
+/** Funcionário cadastrado pelo ADM, com as lojas em que trabalha. */
+export interface Usuario {
+  usuarioId: string;
+  nome: string;
+  ativo: boolean;
+  lojaIds: string[];
+}
+
 export interface Parametros {
   /** Mostrar no resumo final as formas de pagamento com R$ 0,00. */
   mostrarZerados: boolean;
@@ -77,6 +85,8 @@ export interface Snapshot extends Resumo {
   observacao: string;
   houveSangria: boolean;
   registradoEm: string;
+  /** Itens cujo valor atual foi definido por uma edição do administrador (ver `diferencas`). */
+  alteradoPeloAdm?: string[];
 }
 
 export type StatusFechamento = "rascunho" | "finalizado";
@@ -92,6 +102,8 @@ export interface Fechamento extends Valores {
   status: StatusFechamento;
   versao: number;
   quantidadeCorrecoes: number;
+  /** Quantas vezes o administrador editou este fechamento depois de finalizado. */
+  quantidadeEdicoesAdm: number;
   /** Contador de salvamentos do rascunho; o servidor ignora revisões antigas. */
   revisao: number;
   criadoEm: string;
@@ -102,7 +114,7 @@ export interface Fechamento extends Valores {
 
 export interface Alteracao {
   auditoriaId: string;
-  tipo: "finalizacao" | "correcao";
+  tipo: "finalizacao" | "correcao" | "edicao_adm";
   versaoAnterior: number;
   versaoNova: number;
   autorDeclarado: string;
@@ -122,6 +134,7 @@ export interface ItemConsulta {
   status: StatusFechamento;
   versao: number;
   quantidadeCorrecoes: number;
+  quantidadeEdicoesAdm: number;
   criadoEm: string;
   finalizadoEm: string | null;
   formas: { formaId: string; nome: string; subtotalCentavos: number }[];

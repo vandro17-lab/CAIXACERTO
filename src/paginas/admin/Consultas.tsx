@@ -142,20 +142,6 @@ export function Consultas() {
         <label className="campo"><span className="campo-rotulo">Responsável</span>
           <input className="entrada" value={filtros.responsavel} onChange={(e) => mudar({ responsavel: e.target.value })} />
         </label>
-        <label className="campo"><span className="campo-rotulo">Status</span>
-          <select className="entrada" value={filtros.status} onChange={(e) => mudar({ status: e.target.value })}>
-            <option value="">Todos</option>
-            <option value="finalizado">Finalizado</option>
-            <option value="rascunho">Rascunho</option>
-          </select>
-        </label>
-        <label className="campo"><span className="campo-rotulo">Foi corrigido?</span>
-          <select className="entrada" value={filtros.corrigido} onChange={(e) => mudar({ corrigido: e.target.value })}>
-            <option value="">Tanto faz</option>
-            <option value="sim">Sim</option>
-            <option value="nao">Não</option>
-          </select>
-        </label>
         <div className="filtros-acoes">
           <button type="submit" className="botao botao-primario" disabled={buscando}>{buscando ? "Buscando…" : "Filtrar"}</button>
         </div>
@@ -210,6 +196,7 @@ export function Consultas() {
                       <td>{i.responsavelNome}</td>
                       <td>
                         {i.status === "rascunho" ? <Etiqueta cor="ambar">Rascunho</Etiqueta> : i.quantidadeCorrecoes > 0 ? <Etiqueta>Corrigido</Etiqueta> : <Etiqueta cor="verde">Finalizado</Etiqueta>}
+                        {i.quantidadeEdicoesAdm > 0 && <> <Etiqueta cor="azul">Editado pelo ADM</Etiqueta></>}
                       </td>
                       <td className="num">{i.dinheiroLancarCentavos === null ? "—" : formatarReais(i.dinheiroLancarCentavos)}</td>
                       <td className="num">{i.totalLancarCentavos === null ? "—" : formatarReais(i.totalLancarCentavos)}</td>

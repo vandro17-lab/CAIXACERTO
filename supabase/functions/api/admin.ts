@@ -1,8 +1,8 @@
 // Rotas administrativas: sessão ADM, consultas e configurações.
 // A senha só existe como hash bcrypt no banco; a conferência é sempre no servidor.
 import { ehTurno } from "./dominio/tipos.ts";
-import type { Alteracao, ItemConsulta, Parametros } from "./dominio/tipos.ts";
-import { carregarFechamento, formasTodas } from "./fechamentos.ts";
+import type { Alteracao, ItemConsulta, Parametros, Usuario } from "./dominio/tipos.ts";
+import { carregarFechamento, editarComoAdm, formasTodas } from "./fechamentos.ts";
 import { ErroHttp, iso, json, limitar, novoId, novoToken, sha256, texto } from "./infra.ts";
 import type { Ctx, Linha, Sql } from "./infra.ts";
 
@@ -154,6 +154,7 @@ export async function consultar(c: Ctx): Promise<Response> {
       status: l.status,
       versao: l.versao,
       quantidadeCorrecoes: l.quantidade_correcoes,
+      quantidadeEdicoesAdm: l.quantidade_edicoes_adm,
       criadoEm: iso(l.criado_em)!,
       finalizadoEm: iso(l.finalizado_em),
       formas: (snap?.formas ?? []).map((f: Linha) => ({ formaId: f.formaId, nome: f.nome, subtotalCentavos: f.subtotalCentavos })),
@@ -183,6 +184,12 @@ export async function detalhar(c: Ctx, id: string): Promise<Response> {
   return json(200, { fechamento, historico, formas: await formasTodas(c.sql) });
 }
 
+/** POST /admin/fechamentos/:id/editar — o administrador corrige os valores de um fechamento finalizado. */
+export async function editar(c: Ctx, id: string): Promise<Response> {
+  await exigirAdmin(c);
+  return editarComoAdm(c, id);
+}
+
 // ---- configurações --------------------------------------------------------
 
 export async function lerParametros(s: Sql): Promise<Parametros> {
@@ -196,8 +203,86 @@ export async function lojasTodas(s: Sql) {
   return ls.map((l) => ({ lojaId: l.loja_id, nome: l.nome, ativa: l.ativa }));
 }
 
+export async function usuariosTodos(s: Sql): Promise<Usuario[]> {
+  const us = await s.q(
+    `select u.usuario_id, u.nome, u.ativo,
+       (select coalesce(json_agg(ul.loja_id order by ul.loja_id), '[]'::json)::text
+        from usuario_lojas ul where ul.usuario_id = u.usuario_id) as lojas_json
+     from usuarios u order by lower(u.nome)`,
+  );
+  return us.map((u) => ({ usuarioId: u.usuario_id, nome: u.nome, ativo: u.ativo, lojaIds: JSON.parse(u.lojas_json) }));
+}
+
 async function configCompleta(c: Ctx): Promise<Response> {
-  return json(200, { lojas: await lojasTodas(c.sql), formas: await formasTodas(c.sql), parametros: await lerParametros(c.sql) });
+  return json(200, {
+    lojas: await lojasTodas(c.sql),
+    formas: await formasTodas(c.sql),
+    parametros: await lerParametros(c.sql),
+    usuarios: await usuariosTodos(c.sql),
+  });
+}
+
+// ---- usuários -------------------------------------------------------------
+
+async function lojasValidas(s: Sql, v: unknown): Promise<string[]> {
+  if (!Array.isArray(v) || v.length > 200 || v.some((i) => typeof i !== "string")) {
+    throw new ErroHttp(422, "DADOS_INVALIDOS", "Lojas: lista inválida.", { campo: "Lojas" });
+  }
+  const ids = [...new Set(v as string[])];
+  if (!ids.length) throw new ErroHttp(422, "DADOS_INVALIDOS", "Lojas: marque ao menos uma loja para o usuário.", { campo: "Lojas" });
+  const existentes = new Set((await lojasTodas(s)).map((l) => l.lojaId));
+  if (ids.some((i) => !existentes.has(i))) throw new ErroHttp(422, "DADOS_INVALIDOS", "Lojas: loja inexistente.", { campo: "Lojas" });
+  return ids;
+}
+
+async function exigirNomeDeUsuarioLivre(s: Sql, nome: string, ignorarId = ""): Promise<void> {
+  const [igual] = await s.q(
+    "select 1 as ok from usuarios where ativo and lower(nome) = lower($1::text) and usuario_id <> $2::text",
+    [nome, ignorarId],
+  );
+  if (igual) throw new ErroHttp(409, "NOME_DUPLICADO", "Já existe um usuário ativo com esse nome.");
+}
+
+async function gravarLojasDoUsuario(s: Sql, id: string, lojaIds: string[]): Promise<void> {
+  await s.q("delete from usuario_lojas where usuario_id = $1::text", [id]);
+  await s.q(
+    `insert into usuario_lojas (usuario_id, loja_id)
+     select $1::text, x from json_array_elements_text(($2::text)::json) as x`,
+    [id, JSON.stringify(lojaIds)],
+  );
+}
+
+/** POST /admin/usuarios { nome, lojaIds } */
+export async function cadastrarUsuario(c: Ctx): Promise<Response> {
+  await exigirAdmin(c);
+  const nome = texto(c.corpo.nome, "Nome", 2, 60);
+  const lojaIds = await lojasValidas(c.sql, c.corpo.lojaIds);
+  await exigirNomeDeUsuarioLivre(c.sql, nome);
+  const id = `u_${novoId().slice(0, 8)}`;
+  await c.sql.tx(async (s) => {
+    await s.q("insert into usuarios (usuario_id, nome) values ($1::text, $2::text)", [id, nome]);
+    await gravarLojasDoUsuario(s, id, lojaIds);
+  });
+  return configCompleta(c);
+}
+
+/** PUT /admin/usuarios/:id { nome?, ativo?, lojaIds? } — fechamentos antigos guardam o nome da época. */
+export async function alterarUsuario(c: Ctx, id: string): Promise<Response> {
+  await exigirAdmin(c);
+  const [atual] = await c.sql.q("select nome, ativo from usuarios where usuario_id = $1::text", [id]);
+  if (!atual) throw new ErroHttp(404, "NAO_ENCONTRADO", "Usuário não encontrado.");
+  const nome = c.corpo.nome === undefined ? (atual.nome as string) : texto(c.corpo.nome, "Nome", 2, 60);
+  const ativo = typeof c.corpo.ativo === "boolean" ? c.corpo.ativo : (atual.ativo as boolean);
+  const lojaIds = c.corpo.lojaIds === undefined ? null : await lojasValidas(c.sql, c.corpo.lojaIds);
+  if (ativo) await exigirNomeDeUsuarioLivre(c.sql, nome, id);
+  await c.sql.tx(async (s) => {
+    await s.q(
+      "update usuarios set nome = $2::text, ativo = $3::boolean, atualizado_em = now() where usuario_id = $1::text",
+      [id, nome, ativo],
+    );
+    if (lojaIds) await gravarLojasDoUsuario(s, id, lojaIds);
+  });
+  return configCompleta(c);
 }
 
 /** GET /admin/config */

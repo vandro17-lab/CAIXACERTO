@@ -25,7 +25,7 @@ Fórmula (regra v1, fiel à planilha `P. CAIXA`):
 ```bash
 npm install
 npm run dev      # telas em http://localhost:5173 e API local em http://localhost:8787/api
-npm test         # testes de aceitação (T01–T22)
+npm test         # testes de aceitação
 npm run build    # versão de produção em dist/
 ```
 
@@ -37,8 +37,20 @@ A API local usa um Postgres embutido (pasta `.dados-locais`); não precisa de co
    está em `.env.production` (é público). O `vercel.json` já cuida das rotas.
 2. **Backend/banco (Supabase):** já publicados no projeto `caixacerto`. Para republicar depois de mudar o código:
    `supabase functions deploy api --no-verify-jwt` e aplicar novas migrações de `supabase/migrations/`.
+   Depois de republicar, rodar `node ferramentas/conferir-rotas.mjs`: confere que todas as rotas respondem.
 3. **Restringir origem (recomendado):** depois de saber o endereço da Vercel, criar no Supabase o segredo
    `ORIGENS_PERMITIDAS` da função (ex.: `https://caixacerto.vercel.app`).
+
+## Usuários, edição do ADM e impressão
+
+- **Usuários:** o ADM cadastra os funcionários em Configurações → Usuários e marca as lojas de cada um.
+  Só um usuário ativo cadastrado para a loja consegue abrir ou corrigir um fechamento (o nome é escolhido numa lista).
+- **Edição do ADM:** em Consultas → abrir um fechamento finalizado → "Editar valores". Pode ser feita quantas vezes
+  for preciso, exige motivo, fica no histórico e não consome a correção única do funcionário. Os valores alterados
+  pelo ADM aparecem em azul nas telas e com `*` no cupom.
+- **Impressão (80 mm):** o botão "Imprimir cupom (80 mm)" gera o fechamento inteiro (valores, cálculo, lançamentos e
+  observação) na largura de bobina de 80 mm (Epson TM-T20). Na janela de impressão: escolher a Epson, margens
+  "Nenhuma" e escala 100%. A altura do papel é calculada sozinha.
 
 ## Administrador
 

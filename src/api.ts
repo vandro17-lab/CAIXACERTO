@@ -1,5 +1,5 @@
 // Cliente da API. Nada é considerado "salvo" sem a confirmação do servidor.
-import type { Alteracao, Fechamento, Forma, ItemConsulta, Lancamento, Loja, Parametros, Turno } from "@dominio/tipos.ts";
+import type { Alteracao, Fechamento, Forma, ItemConsulta, Lancamento, Loja, Parametros, Turno, Usuario } from "@dominio/tipos.ts";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "/api";
 
@@ -43,6 +43,8 @@ export interface Config {
   lojas: Loja[];
   formas: Forma[];
   parametros: Parametros;
+  /** Na configuração pública, só os ativos; na do ADM, todos. */
+  usuarios: Usuario[];
 }
 
 export interface Identificacao {
@@ -77,6 +79,8 @@ export interface CorpoCorrecao {
   lancamentos: Lancamento[];
   confirmacao: Confirmacao;
 }
+
+export type CorpoEdicaoAdm = Omit<CorpoCorrecao, "requisicaoId" | "autorDeclarado">;
 
 export interface SessaoAdm {
   token: string;
@@ -121,7 +125,11 @@ export const api = {
       pedir<{ itens: ItemConsulta[]; truncado: boolean }>("GET", `/admin/fechamentos?${new URLSearchParams({ ...f })}`, undefined, a(s)),
     detalhar: (s: string, id: string) =>
       pedir<{ fechamento: Fechamento; historico: Alteracao[]; formas: Forma[] }>("GET", `/admin/fechamentos/${id}`, undefined, a(s)),
+    editar: (s: string, id: string, corpo: CorpoEdicaoAdm) => pedir<ComFechamento>("POST", `/admin/fechamentos/${id}/editar`, corpo, a(s)),
     config: (s: string) => pedir<Config>("GET", "/admin/config", undefined, a(s)),
+    cadastrarUsuario: (s: string, nome: string, lojaIds: string[]) => pedir<Config>("POST", "/admin/usuarios", { nome, lojaIds }, a(s)),
+    alterarUsuario: (s: string, id: string, mudanca: { nome?: string; ativo?: boolean; lojaIds?: string[] }) =>
+      pedir<Config>("PUT", `/admin/usuarios/${id}`, mudanca, a(s)),
     cadastrar: (s: string, qual: "lojas" | "formas-pagamento", nome: string) => pedir<Config>("POST", `/admin/${qual}`, { nome }, a(s)),
     alterar: (s: string, qual: "lojas" | "formas-pagamento", id: string, mudanca: { nome?: string; ativa?: boolean }) =>
       pedir<Config>("PUT", `/admin/${qual}/${id}`, mudanca, a(s)),

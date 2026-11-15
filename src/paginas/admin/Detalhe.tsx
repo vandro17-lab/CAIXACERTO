@@ -7,10 +7,13 @@ import type { Alteracao, Fechamento, Forma, Resumo, Snapshot } from "@dominio/ti
 import { api, FalhaApi } from "../../api.ts";
 import { MolduraAdm, useAdm } from "../../adm.tsx";
 import { Aviso, Carregando, Etiqueta } from "../../componentes/Moldura.tsx";
-import { FormulaDinheiro, ListaLancar } from "../../componentes/Resumo.tsx";
+import { Cupom80 } from "../../componentes/Cupom80.tsx";
+import { FormulaDinheiro, LegendaAdm, ListaLancar } from "../../componentes/Resumo.tsx";
 import { dataHora } from "../Resultado.tsx";
 
-/** Detalhe de um fechamento: somente leitura, com lançamentos individuais e histórico. */
+const TIPO_ALTERACAO = { finalizacao: "Finalização", correcao: "Correção do funcionário", edicao_adm: "Edição do administrador" } as const;
+
+/** Detalhe de um fechamento, com lançamentos individuais e histórico. Daqui o ADM imprime e edita. */
 export function Detalhe() {
   const { id = "" } = useParams();
   const { chamar } = useAdm();
@@ -27,6 +30,8 @@ export function Detalhe() {
   const f = d.fechamento;
   const r: Resumo = f.snapshot ?? montarResumo(f, d.formas);
   const observacao = f.snapshot?.observacao ?? f.observacao;
+  const adm = f.snapshot?.alteradoPeloAdm;
+  const marcaAdm = (chave: string) => (adm?.includes(chave) ? "valor-adm" : "");
   return (
     <MolduraAdm>
       <p className="nao-imprimir"><Link to="/admin/consultas">← Consultas</Link></p>
@@ -34,9 +39,26 @@ export function Detalhe() {
         <h1>{f.lojaNome} · {formatarData(f.dataLocal)} · {NOME_TURNO[f.turno]}</h1>
         <div className="etiquetas">
           {f.status === "rascunho" ? <Etiqueta cor="ambar">Rascunho</Etiqueta> : <Etiqueta cor="verde">Finalizado · versão {f.versao}</Etiqueta>}
-          {f.quantidadeCorrecoes > 0 && <Etiqueta>Corrigido uma vez — bloqueado</Etiqueta>}
+          {f.quantidadeCorrecoes > 0 && <Etiqueta>Corrigido uma vez pelo funcionário</Etiqueta>}
+          {f.quantidadeEdicoesAdm > 0 && <Etiqueta cor="azul">Editado pelo administrador ({f.quantidadeEdicoesAdm})</Etiqueta>}
         </div>
       </div>
+      <div className="acoes nao-imprimir">
+        {f.status === "finalizado" && <Link to={`/admin/consultas/${f.id}/editar`} className="botao botao-primario">Editar valores</Link>}
+        <button type="button" className="botao botao-contorno" onClick={() => window.print()}>Imprimir cupom (80 mm)</button>
+      </div>
+      <Cupom80
+        dados={{
+          lojaNome: f.lojaNome, dataLocal: f.dataLocal, turno: f.turno, responsavelNome: f.responsavelNome,
+          situacao: f.status === "rascunho" ? "RASCUNHO — ainda não finalizado" : `Versão ${f.versao} · ${dataHora(f.versao > 1 ? f.atualizadoEm : f.finalizadoEm ?? f.atualizadoEm)}`,
+          avisos: [...(f.quantidadeCorrecoes > 0 ? ["Corrigido uma vez pelo funcionário"] : []), ...(f.quantidadeEdicoesAdm > 0 ? ["Editado pelo administrador"] : [])],
+          observacao,
+        }}
+        r={r}
+        adm={adm}
+        mostrarZerados
+        comMemoria
+      />
       <p className="subtitulo">
         Responsável (nome declarado): {f.responsavelNome} · criado em {dataHora(f.criadoEm)}
         {f.finalizadoEm && <> · finalizado em {dataHora(f.finalizadoEm)}</>}
@@ -44,17 +66,19 @@ export function Detalhe() {
       {f.status === "rascunho" && <Aviso tipo="info">Este fechamento ainda não foi finalizado: os valores abaixo são parciais.</Aviso>}
 
       <div className="grade-resumo">
-        <ListaLancar r={r} mostrarZerados />
+        <ListaLancar r={r} mostrarZerados adm={adm} />
         <div>
-          <FormulaDinheiro r={r} />
+          <FormulaDinheiro r={r} adm={adm} />
           <p className="nota">
             Fórmula aplicada (regra v1, fiel à planilha): Dinheiro a lançar = Dinheiro contado − (Abertura − Sangria de troco).
           </p>
         </div>
       </div>
 
+      <LegendaAdm adm={adm} />
+
       {observacao && (
-        <div className="observacao">
+        <div className={`observacao ${marcaAdm("observacao")}`}>
           <h3>Observação</h3>
           <p>{observacao}</p>
         </div>
@@ -66,13 +90,13 @@ export function Detalhe() {
           <thead><tr><th>Coluna</th><th>Lançamentos</th><th className="num">Subtotal</th></tr></thead>
           <tbody>
             {r.formas.map((x) => (
-              <tr key={x.formaId}>
+              <tr key={x.formaId} className={marcaAdm(`forma:${x.formaId}`)}>
                 <td>{x.nome}</td>
                 <td className="valores">{x.lancamentos.length ? x.lancamentos.map(formatarNumero).join("  ·  ") : "—"}</td>
                 <td className="num">{formatarReais(x.subtotalCentavos)}</td>
               </tr>
             ))}
-            <tr>
+            <tr className={marcaAdm("dinheiroContado")}>
               <td>Dinheiro contado</td>
               <td className="valores">{r.dinheiroContado.length ? r.dinheiroContado.map(formatarNumero).join("  ·  ") : "—"}</td>
               <td className="num">{formatarReais(r.dinheiroContadoCentavos)}</td>
@@ -85,13 +109,13 @@ export function Detalhe() {
       {d.historico.length === 0 && <p className="vazio">Sem registros: o fechamento ainda está em rascunho.</p>}
       <ol className="historico">
         {d.historico.map((h) => (
-          <li key={h.auditoriaId} className="cartao">
+          <li key={h.auditoriaId} className={`cartao${h.tipo === "edicao_adm" ? " cartao-adm" : ""}`}>
             <p>
-              <strong>{h.tipo === "finalizacao" ? "Finalização" : "Correção"} — versão {h.versaoNova}</strong>
+              <strong>{TIPO_ALTERACAO[h.tipo]} — versão {h.versaoNova}</strong>
               <br />
-              {dataHora(h.alteradoEm)} · por {h.autorDeclarado} (nome declarado)
+              {dataHora(h.alteradoEm)} · por {h.autorDeclarado}{h.tipo === "edicao_adm" ? "" : " (nome declarado)"}
             </p>
-            {h.tipo === "correcao" && (
+            {h.tipo !== "finalizacao" && (
               <>
                 <p><strong>Motivo:</strong> {h.motivo}</p>
                 {h.antes && <Comparacao antes={h.antes} depois={h.depois} />}
@@ -100,7 +124,7 @@ export function Detalhe() {
           </li>
         ))}
       </ol>
-      <p className="nota">Os números não podem ser alterados por esta tela. O histórico é permanente.</p>
+      <p className="nota">O histórico é permanente: cada edição do administrador fica registrada com o motivo, o antes e o depois.</p>
     </MolduraAdm>
   );
 }
