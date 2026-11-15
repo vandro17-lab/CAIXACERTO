@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-export function Logo({ tamanho = 28 }: { tamanho?: number }) {
-  return (
-    <svg className="logo" viewBox="0 0 32 32" width={tamanho} height={tamanho} aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="var(--verde)" />
-      <path d="M9 16.5l4.6 4.6L23.2 11" fill="none" stroke="var(--sobre-verde)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+/** Frase da marca. */
+export const LEMA = "Caixa conferido é Caixa Certo.";
+
+/** A marca do Caixa Certo (a imagem já traz o nome). */
+export function Logo({ tamanho = 40 }: { tamanho?: number }) {
+  return <img className="logo" src="/marca.png" width={tamanho} height={tamanho} alt="" aria-hidden="true" decoding="async" />;
 }
 
 interface Props {
