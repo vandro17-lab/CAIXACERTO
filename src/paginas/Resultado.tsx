@@ -5,7 +5,7 @@ import type { Fechamento } from "@dominio/tipos.ts";
 import type { Config } from "../api.ts";
 import { Etiqueta, Moldura } from "../componentes/Moldura.tsx";
 import { Cupom80 } from "../componentes/Cupom80.tsx";
-import { FormulaDinheiro, LegendaAdm, ListaLancar } from "../componentes/Resumo.tsx";
+import { FormulaDinheiro, LegendaAdm, ListaLancar, textoDivergencia } from "../componentes/Resumo.tsx";
 import { textoResumo } from "../resumoTexto.ts";
 
 export const dataHora = (iso: string) =>
@@ -44,6 +44,7 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
         <div className="etiquetas">
           {corrigido ? <Etiqueta cor="ambar">Corrigido uma vez — bloqueado</Etiqueta> : <Etiqueta cor="verde">Versão {f.versao}</Etiqueta>}
           {editadoAdm && <Etiqueta cor="azul">Editado pelo administrador</Etiqueta>}
+          {s.aberturaDivergente && <Etiqueta cor="vermelha">Abertura com divergência</Etiqueta>}
         </div>
       </div>
       <p className="subtitulo">
@@ -54,7 +55,8 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
       <Cupom80
         dados={{
           lojaNome: s.lojaNome, dataLocal: s.dataLocal, turno: s.turno, responsavelNome: s.responsavelNome, situacao: `${situacao} (versão ${f.versao})`,
-          avisos: [...(corrigido ? ["Corrigido uma vez pelo funcionário"] : []), ...(editadoAdm ? ["Editado pelo administrador"] : [])],
+          avisos: [...(corrigido ? ["Corrigido uma vez pelo funcionário"] : []), ...(editadoAdm ? ["Editado pelo administrador"] : []),
+            ...(s.aberturaDivergente ? [textoDivergencia(s.aberturaDivergente)] : [])],
           observacao: s.observacao,
         }}
         r={s}
@@ -66,7 +68,7 @@ export function Resultado({ f, config }: { f: Fechamento; config: Config }) {
       <div className="grade-resumo">
         <ListaLancar r={s} mostrarZerados={config.parametros.mostrarZerados} adm={s.alteradoPeloAdm} />
         <div>
-          <FormulaDinheiro r={s} adm={s.alteradoPeloAdm} />
+          <FormulaDinheiro r={s} adm={s.alteradoPeloAdm} divergencia={s.aberturaDivergente} />
         </div>
       </div>
       <LegendaAdm adm={s.alteradoPeloAdm} />

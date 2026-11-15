@@ -3,7 +3,7 @@
 import { diferencas, montarResumo, pendencias, REGRA_CALCULO } from "./dominio/calculo.ts";
 import { MAX_CENTAVOS } from "./dominio/dinheiro.ts";
 import { ehTurno, normalizarNome } from "./dominio/tipos.ts";
-import type { Fechamento, Forma, Lancamento, Resumo, Snapshot, Valores } from "./dominio/tipos.ts";
+import type { ConferenciaAbertura, Fechamento, Forma, Lancamento, Resumo, Snapshot, Valores } from "./dominio/tipos.ts";
 import { ErroHttp, inteiro, iso, json, limitar, novoId, sha256, texto, textoLongo } from "./infra.ts";
 import type { Ctx, Linha, Sql } from "./infra.ts";
 
@@ -18,13 +18,65 @@ const JSON_LANCAMENTOS = `(select coalesce(json_agg(json_build_object('id', x.la
 const JSON_FORMAS = `(select coalesce(json_agg(json_build_object('formaId', p.forma_id, 'nome', p.nome, 'ordem', p.ordem,
     'ativa', p.ativa) order by p.ordem, p.nome), '[]'::json)::text from formas_pagamento p)`;
 
+// Posição de um fechamento na linha do tempo da loja: data e, dentro dela, manhã, tarde, noite.
+const posicao = (a: string) => `(${a}.data_local, case ${a}.turno when 'manha' then 1 when 'tarde' then 2 else 3 end)`;
+
+/**
+ * Fechamento anterior de (loja, data, turno): o último FINALIZADO da mesma loja antes dessa posição,
+ * mesmo que seja de dias atrás. É dele o "Dinheiro da gaveta" que vira a abertura esperada.
+ * `alvo` é uma expressão SQL com as colunas loja_id, data_local e turno.
+ */
+const jsonAnterior = (alvo: string) => `(select row_to_json(a)::text from (
+    select p.fechamento_id as id, p.data_local as "dataLocal", p.turno, p.dinheiro_contado_centavos as "gavetaCentavos"
+    from fechamentos p where p.loja_id = ${alvo}.loja_id and p.status = 'finalizado' and ${posicao("p")} < ${posicao(alvo)}
+    order by p.data_local desc, case p.turno when 'manha' then 1 when 'tarde' then 2 else 3 end desc limit 1) a)`;
+/** O fechamento imediatamente anterior da loja (em qualquer situação) ainda está em rascunho? */
+const anteriorEmRascunho = (alvo: string) => `coalesce((select p.status = 'rascunho' from fechamentos p
+    where p.loja_id = ${alvo}.loja_id and ${posicao("p")} < ${posicao(alvo)}
+    order by p.data_local desc, case p.turno when 'manha' then 1 when 'tarde' then 2 else 3 end desc limit 1), false)`;
+const JSON_ORIGEM = `(select json_build_object('dataLocal', o.data_local, 'turno', o.turno)::text
+    from fechamentos o where o.fechamento_id = f.abertura_origem_id)`;
+
+interface Anterior {
+  id: string;
+  dataLocal: string;
+  turno: Fechamento["turno"];
+  gavetaCentavos: number;
+}
+
+const anteriorDe = (l: Linha): Anterior | null => (l.anterior_json ? JSON.parse(l.anterior_json) : null);
+/** Regra: sem fechamento anterior, ou com a gaveta dele zerada, a abertura é digitada livremente. */
+const esperadoDe = (a: Anterior | null): number | null => (a && a.gavetaCentavos > 0 ? a.gavetaCentavos : null);
+
+/** Situação da conferência de abertura. No rascunho ainda não respondido, o esperado é lido na hora. */
+function conferenciaDe(l: Linha): ConferenciaAbertura {
+  if (l.abertura_conferida) {
+    return {
+      situacao: l.abertura_conferida,
+      esperadoCentavos: l.abertura_esperada_centavos,
+      origem: l.origem_json ? JSON.parse(l.origem_json) : null,
+      anteriorEmRascunho: false,
+    };
+  }
+  const anterior = l.status === "rascunho" ? anteriorDe(l) : null;
+  const esperado = esperadoDe(anterior);
+  return {
+    situacao: esperado === null ? "livre" : "pendente",
+    esperadoCentavos: esperado,
+    origem: esperado === null ? null : { dataLocal: anterior!.dataLocal, turno: anterior!.turno },
+    anteriorEmRascunho: l.status === "rascunho" && l.anterior_rascunho === true,
+  };
+}
+
 /**
  * Lê tudo o que uma requisição precisa em UMA ida ao banco: o fechamento, seus lançamentos,
- * as formas de pagamento e se a chave de acesso informada confere (`autorizado`).
+ * as formas de pagamento, o fechamento anterior da loja (abertura esperada) e se a chave de
+ * acesso informada confere (`autorizado`).
  */
 async function buscar(s: Sql, id: string, travar = false, tokenHash: string | null = null): Promise<Linha> {
   const [l] = await s.q(
     `select f.*, l.nome as loja_nome, ${JSON_LANCAMENTOS} as lancamentos_json, ${JSON_FORMAS} as formas_json,
+       ${jsonAnterior("f")} as anterior_json, ${anteriorEmRascunho("f")} as anterior_rascunho, ${JSON_ORIGEM} as origem_json,
        exists (select 1 from fechamento_tokens t
                where t.fechamento_id = f.fechamento_id and t.token_hash = $2::text) as autorizado
      from fechamentos f join lojas l on l.loja_id = f.loja_id
@@ -65,6 +117,7 @@ function paraDto(l: Linha, lancamentos: Lancamento[] = lancamentosDe(l)): Fecham
     finalizadoEm: iso(l.finalizado_em),
     atualizadoEm: iso(l.atualizado_em)!,
     snapshot: l.snapshot_json ? JSON.parse(l.snapshot_json) : null,
+    abertura: conferenciaDe(l),
   };
 }
 
@@ -146,8 +199,8 @@ function validarValores(b: Linha, formas: Forma[]): Valores {
  * Recalcula tudo no servidor e exige que os valores vistos pelo operador sejam
  * exatamente os mesmos. Divergência = dado manipulado ou tela desatualizada.
  */
-function conferirCalculo(b: Linha, v: Valores, r: Resumo): void {
-  const p = pendencias(v, r);
+function conferirCalculo(b: Linha, v: Valores, r: Resumo, abertura?: Parameters<typeof pendencias>[2]): void {
+  const p = pendencias(v, r, abertura);
   if (p.length) throw new ErroHttp(422, "PENDENCIAS", p[0], { pendencias: p });
   const visto = b.confirmacao ?? {};
   if (visto.dinheiroLancarCentavos !== r.dinheiroLancarCentavos || visto.totalLancarCentavos !== r.totalLancarCentavos) {
@@ -158,7 +211,8 @@ function conferirCalculo(b: Linha, v: Valores, r: Resumo): void {
   }
 }
 
-function montarSnapshot(l: Linha, v: Valores, r: Resumo, versao: number, observacao: string): Snapshot {
+/** `esperadoCentavos`: valor de abertura que o servidor esperava; se a abertura for outra, o retrato leva a marca de divergência. */
+function montarSnapshot(l: Linha, v: Valores, r: Resumo, versao: number, observacao: string, esperadoCentavos: number | null): Snapshot {
   return {
     ...r,
     versao,
@@ -171,6 +225,9 @@ function montarSnapshot(l: Linha, v: Valores, r: Resumo, versao: number, observa
     observacao,
     houveSangria: v.houveSangria === true,
     registradoEm: new Date().toISOString(),
+    ...(esperadoCentavos !== null && esperadoCentavos !== r.aberturaCentavos
+      ? { aberturaDivergente: { esperadoCentavos, encontradoCentavos: r.aberturaCentavos } }
+      : {}),
   };
 }
 
@@ -232,6 +289,37 @@ const tokenDoCorpo = (b: Linha): string => {
   }
   return b.token;
 };
+
+// ---- senha do gerente -----------------------------------------------------
+
+const TENTATIVAS_GERENTE = [5, 15, 60] as const;
+
+/**
+ * Confere a senha do gerente (4 dígitos; no banco só existe o hash). Serve apenas para liberar
+ * divergência de abertura. Limite de erros por fechamento, por aparelho e geral, porque a senha é curta.
+ * Chamar FORA de transação, para a contagem de tentativas não ser desfeita junto com um erro.
+ */
+async function exigirSenhaGerente(c: Ctx, id: string, senha: unknown): Promise<void> {
+  if (typeof senha !== "string" || !/^\d{4}$/.test(senha)) {
+    throw new ErroHttp(403, "SENHA_GERENTE_NECESSARIA", "Informe a senha do gerente (4 dígitos).");
+  }
+  const [g] = await c.sql.q("select senha_hash from gerente_credencial");
+  if (!g) {
+    throw new ErroHttp(409, "SENHA_GERENTE_NAO_CADASTRADA", "A senha do gerente ainda não foi cadastrada. Peça ao administrador para cadastrá-la em Configurações.");
+  }
+  const chaves = [`gerente:f:${id}`, `gerente:ip:${c.ip}`, "gerente:todos"];
+  await limitar(c.sql, chaves[0], TENTATIVAS_GERENTE[0], 900);
+  await limitar(c.sql, chaves[1], TENTATIVAS_GERENTE[1], 900);
+  await limitar(c.sql, chaves[2], TENTATIVAS_GERENTE[2], 3600);
+  if (!(await c.deps.conferirSenha(senha, g.senha_hash))) {
+    throw new ErroHttp(403, "SENHA_GERENTE_INCORRETA", "Senha do gerente incorreta.");
+  }
+  // Senha certa não conta como tentativa.
+  await c.sql.q(
+    "update limites set contagem = greatest(contagem - 1, 0) where chave in ($1::text, $2::text, $3::text)",
+    chaves,
+  );
+}
 
 // ---- rotas ----------------------------------------------------------------
 
@@ -305,7 +393,10 @@ export async function salvarRascunho(c: Ctx, id: string): Promise<Response> {
     if (ident.responsavelNome !== l.responsavel_nome && ident.lojaId === l.loja_id) {
       ident.responsavelNome = await exigirUsuarioDaLoja(s, ident.lojaId, ident.responsavelNome, "Nome do responsável", false);
     }
-    if (ident.lojaId !== l.loja_id || ident.dataLocal !== l.data_local || ident.turno !== l.turno) {
+    const mudouPosicao = ident.lojaId !== l.loja_id || ident.dataLocal !== l.data_local || ident.turno !== l.turno;
+    // Abertura esperada: lida junto com o fechamento; só é consultada de novo se loja, data ou turno mudarem.
+    let vizinho = { anterior_json: l.anterior_json, anterior_rascunho: l.anterior_rascunho };
+    if (mudouPosicao) {
       if (ident.lojaId !== l.loja_id) {
         ident.responsavelNome = await exigirUsuarioDaLoja(s, ident.lojaId, ident.responsavelNome, "Nome do responsável");
       }
@@ -315,19 +406,33 @@ export async function salvarRascunho(c: Ctx, id: string): Promise<Response> {
         [ident.lojaId, ident.dataLocal, ident.turno, id],
       );
       if (outro) throw await erroExistente(s, ident.lojaId, ident.dataLocal, ident.turno);
+      [vizinho] = await s.q(
+        `select ${jsonAnterior("x")} as anterior_json, ${anteriorEmRascunho("x")} as anterior_rascunho
+         from (select $1::text as loja_id, $2::text as data_local, $3::text as turno) x`,
+        [ident.lojaId, ident.dataLocal, ident.turno],
+      ) as never[];
     }
+    // Quem decide a abertura é o servidor. Mudou loja, data ou turno: a conferência é refeita.
+    // Com valor esperado, a abertura só entra pela rota de conferência; o que a tela mandar aqui é ignorado.
+    const conferida: string | null = mudouPosicao ? null : l.abertura_conferida;
+    if (conferida) v.aberturaCentavos = l.abertura_centavos;
+    else if (esperadoDe(anteriorDe(vizinho)) !== null) v.aberturaCentavos = null;
     const resumo = montarResumo(v, []);
     const [novo] = await s.q(
       `${COM_LANCAMENTOS}
        update fechamentos f set loja_id = $3::text, data_local = $4::text, turno = $5::text, responsavel_nome = $6::text,
          observacao = $7::text, abertura_centavos = $8::int, houve_sangria = $9::boolean, sangria_centavos = $10::int,
-         dinheiro_contado_centavos = $11::int, revisao = $12::int, atualizado_em = now()
+         dinheiro_contado_centavos = $11::int, revisao = $12::int, atualizado_em = now(),
+         abertura_conferida = $13::text,
+         abertura_esperada_centavos = case when $13::text is null then null else abertura_esperada_centavos end,
+         abertura_origem_id = case when $13::text is null then null else abertura_origem_id end
        where f.fechamento_id = $1::text
        returning f.*, (select l.nome from lojas l where l.loja_id = f.loja_id) as loja_nome`,
       [id, jsonLancamentos(v.lancamentos), ident.lojaId, ident.dataLocal, ident.turno, ident.responsavelNome,
-        ident.observacao, v.aberturaCentavos, v.houveSangria, v.sangriaCentavos, resumo.dinheiroContadoCentavos, revisao],
+        ident.observacao, v.aberturaCentavos, v.houveSangria, v.sangriaCentavos, resumo.dinheiroContadoCentavos, revisao,
+        conferida],
     );
-    return { aplicado: true, fechamento: paraDto(novo, v.lancamentos) };
+    return { aplicado: true, fechamento: paraDto({ ...l, ...novo, ...vizinho }, v.lancamentos) };
   });
   return json(200, r);
 }
@@ -347,8 +452,8 @@ export async function finalizar(c: Ctx, id: string): Promise<Response> {
       lancamentos: lancamentosDe(l),
     };
     const r = montarResumo(v, formasDe(l));
-    conferirCalculo(c.corpo, v, r);
-    const snap = JSON.stringify(montarSnapshot(l, v, r, 1, l.observacao));
+    conferirCalculo(c.corpo, v, r, { situacao: conferenciaDe(l).situacao, observacao: l.observacao });
+    const snap = JSON.stringify(montarSnapshot(l, v, r, 1, l.observacao, l.abertura_esperada_centavos));
     // Finalização e registro no histórico no mesmo comando.
     const [novo] = await s.q(
       `with historico as (
@@ -362,10 +467,52 @@ export async function finalizar(c: Ctx, id: string): Promise<Response> {
       [id, r.dinheiroContadoCentavos, r.dinheiroLancarCentavos, r.totalLancarCentavos, r.sangriaCentavos, REGRA_CALCULO,
         snap, novoId(), l.responsavel_nome],
     );
-    return paraDto({ ...novo, loja_nome: l.loja_nome }, v.lancamentos);
+    return paraDto({ ...l, ...novo }, v.lancamentos);
   });
   return json(200, { fechamento });
 }
+
+/**
+ * POST /fechamentos/:id/abertura — conferência da abertura do caixa.
+ * `{ confere: true, esperadoCentavos }`: o funcionário confirma que há na gaveta o valor esperado.
+ * `{ confere: false, esperadoCentavos, valorCentavos, senhaGerente }`: o valor é outro; exige a senha do gerente.
+ * O valor esperado é sempre o do servidor; `esperadoCentavos` só garante que a pessoa respondeu sobre o valor atual.
+ */
+export async function conferirAbertura(c: Ctx, id: string): Promise<Response> {
+  const b = c.corpo;
+  if (typeof b.confere !== "boolean") throw new ErroHttp(422, "DADOS_INVALIDOS", "Abertura: responda Sim ou Não.");
+  const encontrado = b.confere ? null : inteiro(b.valorCentavos, "Valor encontrado na gaveta", 0, MAX_CENTAVOS);
+  // A senha só é conferida para quem tem acesso ao fechamento, e antes da transação (ver exigirSenhaGerente).
+  if (!b.confere) {
+    await abrir(c, c.sql, id);
+    await exigirSenhaGerente(c, id, b.senhaGerente);
+  }
+  const fechamento = await c.sql.tx(async (s) => {
+    const l = await abrir(c, s, id, true);
+    if (l.status !== "rascunho") throw new ErroHttp(409, "JA_FINALIZADO", "Este fechamento já foi finalizado.");
+    const anterior = anteriorDe(l);
+    const esperado = esperadoDe(anterior);
+    if (esperado === null) {
+      throw new ErroHttp(409, "ABERTURA_LIVRE", "Não há valor de abertura para conferir neste fechamento: digite a abertura.", { fechamento: paraDto(l) });
+    }
+    if (b.esperadoCentavos !== esperado) {
+      throw new ErroHttp(409, "ABERTURA_MUDOU", "O valor esperado na gaveta mudou. Confira de novo.", { fechamento: paraDto({ ...l, abertura_conferida: null }) });
+    }
+    const valor = encontrado ?? esperado;
+    const [novo] = await s.q(
+      `update fechamentos f set abertura_centavos = $2::int, abertura_conferida = $3::text,
+         abertura_esperada_centavos = $4::int, abertura_origem_id = $5::text, atualizado_em = now()
+       where f.fechamento_id = $1::text returning f.*`,
+      [id, valor, valor === esperado ? "sim" : "divergente", esperado, anterior!.id],
+    );
+    return paraDto({ ...l, ...novo, origem_json: JSON.stringify({ dataLocal: anterior!.dataLocal, turno: anterior!.turno }) });
+  });
+  return json(200, { fechamento });
+}
+
+/** Depois de finalizado: a abertura continua comparada com o valor esperado guardado na conferência. */
+const conferidaApos = (l: Linha, aberturaCentavos: number | null): "sim" | "divergente" | null =>
+  l.abertura_esperada_centavos == null ? null : aberturaCentavos === l.abertura_esperada_centavos ? "sim" : "divergente";
 
 const essencia = (s: Resumo & { observacao: string; houveSangria: boolean | null }) =>
   JSON.stringify([s.aberturaCentavos, s.houveSangria === true, s.sangriaCentavos, s.observacao, s.dinheiroContado,
@@ -377,6 +524,13 @@ const essencia = (s: Resumo & { observacao: string; houveSangria: boolean | null
  */
 export async function corrigir(c: Ctx, id: string): Promise<Response> {
   const b = c.corpo;
+  // Mudar a abertura na correção exige a senha do gerente, conferida antes da transação.
+  const previa = await abrir(c, c.sql, id);
+  const senhaConferidaPara: number | null =
+    previa.status === "finalizado" && previa.quantidade_correcoes === 0 && typeof b.aberturaCentavos === "number" &&
+      b.aberturaCentavos !== previa.abertura_centavos
+      ? (await exigirSenhaGerente(c, id, b.senhaGerente), b.aberturaCentavos)
+      : null;
   const fechamento = await c.sql.tx(async (s) => {
     const l = await abrir(c, s, id, true);
     const requisicaoId = texto(b.requisicaoId, "Requisição", 8, 64);
@@ -399,10 +553,14 @@ export async function corrigir(c: Ctx, id: string): Promise<Response> {
     if (b.versaoEsperada !== l.versao) {
       throw new ErroHttp(409, "VERSAO_DESATUALIZADA", "O fechamento mudou desde que você abriu a correção. Recarregue a página.");
     }
+    if (v.aberturaCentavos !== l.abertura_centavos && v.aberturaCentavos !== senhaConferidaPara) {
+      throw new ErroHttp(403, "SENHA_GERENTE_NECESSARIA", "Para mudar a abertura, informe a senha do gerente (4 dígitos).");
+    }
     const r = montarResumo(v, formas);
-    conferirCalculo(b, v, r);
+    const conferida = conferidaApos(l, v.aberturaCentavos);
+    conferirCalculo(b, v, r, { situacao: conferida ?? "livre", observacao });
     const antes: Snapshot = JSON.parse(l.snapshot_json);
-    const depois = montarSnapshot(l, v, r, l.versao + 1, observacao);
+    const depois = montarSnapshot(l, v, r, l.versao + 1, observacao, l.abertura_esperada_centavos);
     if (essencia(antes) === essencia(depois)) {
       throw new ErroHttp(422, "SEM_ALTERACOES", "Nenhum valor foi alterado. A correção única não foi consumida.");
     }
@@ -422,14 +580,14 @@ export async function corrigir(c: Ctx, id: string): Promise<Response> {
        update fechamentos f set versao = versao + 1, quantidade_correcoes = 1, observacao = $2::text,
          abertura_centavos = $3::int, houve_sangria = $4::boolean, sangria_centavos = $5::int,
          dinheiro_contado_centavos = $6::int, dinheiro_lancar_centavos = $7::int, total_lancar_centavos = $8::int,
-         snapshot_json = $9::text, atualizado_em = now()
+         snapshot_json = $9::text, abertura_conferida = $16::text, atualizado_em = now()
        where f.fechamento_id = $1::text and f.status = 'finalizado' and f.quantidade_correcoes = 0 returning f.*`,
       [id, observacao, v.aberturaCentavos, v.houveSangria, r.sangriaCentavos, r.dinheiroContadoCentavos,
         r.dinheiroLancarCentavos, r.totalLancarCentavos, JSON.stringify(depois), novoId(), l.versao, l.snapshot_json,
-        autorCadastrado, motivo, requisicaoId],
+        autorCadastrado, motivo, requisicaoId, conferida],
     );
     if (!novo) throw new Error("Correção não aplicada: o fechamento mudou durante a transação.");
-    return paraDto({ ...novo, loja_nome: l.loja_nome }, v.lancamentos);
+    return paraDto({ ...l, ...novo }, v.lancamentos);
   });
   return json(200, { fechamento });
 }
@@ -458,7 +616,8 @@ export async function editarComoAdm(c: Ctx, id: string): Promise<Response> {
     const r = montarResumo(v, formas);
     conferirCalculo(b, v, r);
     const antes: Snapshot = JSON.parse(l.snapshot_json);
-    const depois = montarSnapshot(l, v, r, l.versao + 1, observacao);
+    // O ADM altera a abertura sem senha do gerente; a marca de divergência acompanha o novo valor.
+    const depois = montarSnapshot(l, v, r, l.versao + 1, observacao, l.abertura_esperada_centavos);
     const mudou = diferencas(antes, depois);
     if (!mudou.length) throw new ErroHttp(422, "SEM_ALTERACOES", "Nenhum valor foi alterado.");
     depois.alteradoPeloAdm = [...new Set([...(antes.alteradoPeloAdm ?? []), ...mudou])];
@@ -472,13 +631,14 @@ export async function editarComoAdm(c: Ctx, id: string): Promise<Response> {
        update fechamentos f set versao = versao + 1, quantidade_edicoes_adm = quantidade_edicoes_adm + 1,
          observacao = $2::text, abertura_centavos = $3::int, houve_sangria = $4::boolean, sangria_centavos = $5::int,
          dinheiro_contado_centavos = $6::int, dinheiro_lancar_centavos = $7::int, total_lancar_centavos = $8::int,
-         snapshot_json = $9::text, atualizado_em = now()
+         snapshot_json = $9::text, abertura_conferida = $14::text, atualizado_em = now()
        where f.fechamento_id = $1::text and f.status = 'finalizado' returning f.*`,
       [id, observacao, v.aberturaCentavos, v.houveSangria, r.sangriaCentavos, r.dinheiroContadoCentavos,
-        r.dinheiroLancarCentavos, r.totalLancarCentavos, JSON.stringify(depois), novoId(), l.versao, l.snapshot_json, motivo],
+        r.dinheiroLancarCentavos, r.totalLancarCentavos, JSON.stringify(depois), novoId(), l.versao, l.snapshot_json, motivo,
+        conferidaApos(l, v.aberturaCentavos)],
     );
     if (!novo) throw new Error("Edição não aplicada: o fechamento mudou durante a transação.");
-    return paraDto({ ...novo, loja_nome: l.loja_nome }, v.lancamentos);
+    return paraDto({ ...l, ...novo }, v.lancamentos);
   });
   return json(200, { fechamento });
 }

@@ -96,4 +96,23 @@ describe("cálculo fiel à planilha P. CAIXA (regra v1)", () => {
     expect(pendencias(semValor, montarResumo(semValor, FORMAS))).toHaveLength(1);
     expect(pendencias(valores(), montarResumo(valores(), FORMAS))).toEqual([]);
   });
+
+  it("abertura esperada sem conferência e divergência sem observação impedem a finalização", () => {
+    const v = valores();
+    const r = montarResumo(v, FORMAS);
+    expect(pendencias(v, r, { situacao: "sim", observacao: "" })).toEqual([]);
+    expect(pendencias(v, r, { situacao: "livre", observacao: "" })).toEqual([]);
+    const semAbertura = valores({ aberturaCentavos: null });
+    const pendente = pendencias(semAbertura, montarResumo(semAbertura, FORMAS), { situacao: "pendente", observacao: "" });
+    expect(pendente).toHaveLength(1);
+    expect(pendente[0]).toContain("Confira a abertura");
+    expect(pendencias(v, r, { situacao: "divergente", observacao: "  ok " }).join(" ")).toContain("observação");
+    expect(pendencias(v, r, { situacao: "divergente", observacao: "Faltaram R$ 50,00 na gaveta." })).toEqual([]);
+  });
+
+  it("a fórmula do dinheiro é a mesma seja qual for a origem da abertura", () => {
+    // Abertura 600 (gaveta do turno anterior), gaveta 900, sangria 100 → 900 − (600 − 100) = 400.
+    const r = montarResumo(valores({ aberturaCentavos: 60000, sangriaCentavos: 10000, lancamentos: [l(null, 90000)] }), FORMAS);
+    expect(r.dinheiroLancarCentavos).toBe(40000);
+  });
 });

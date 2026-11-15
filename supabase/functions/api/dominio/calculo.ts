@@ -5,7 +5,7 @@
 // Qualquer mudança aqui exige nova versão documentada da regra (v2) e testes,
 // preservando os fechamentos já finalizados, que guardam o próprio retrato.
 import { formatarReais } from "./dinheiro.ts";
-import type { Forma, Resumo, Valores } from "./tipos.ts";
+import type { Forma, Resumo, SituacaoAbertura, Valores } from "./tipos.ts";
 
 export const REGRA_CALCULO = "v1" as const;
 
@@ -49,10 +49,22 @@ export function montarResumo(v: Valores, formas: Forma[]): Resumo {
   };
 }
 
-/** O que ainda impede a finalização. Lista vazia = pode finalizar. */
-export function pendencias(v: Valores, r: Resumo): string[] {
+/** Tamanho mínimo da observação que explica uma abertura com divergência. */
+export const MIN_OBSERVACAO_DIVERGENCIA = 5;
+
+/**
+ * O que ainda impede a finalização. Lista vazia = pode finalizar.
+ * `abertura` traz a conferência da abertura e a observação: valor esperado ainda não conferido
+ * e divergência sem explicação também impedem.
+ */
+export function pendencias(v: Valores, r: Resumo, abertura?: { situacao: SituacaoAbertura; observacao: string }): string[] {
   const p: string[] = [];
-  if (v.aberturaCentavos === null) p.push("Informe o valor de abertura do caixa.");
+  if (abertura?.situacao === "pendente") {
+    p.push("Confira a abertura do caixa na etapa Abertura. Se a pergunta não aparecer, atualize a página.");
+  } else if (v.aberturaCentavos === null) p.push("Informe o valor de abertura do caixa.");
+  if (abertura?.situacao === "divergente" && abertura.observacao.trim().length < MIN_OBSERVACAO_DIVERGENCIA) {
+    p.push("Abertura com divergência: escreva na observação o que aconteceu.");
+  }
   if (v.houveSangria === null) p.push("Informe se houve sangria de troco.");
   if (v.houveSangria === true && v.sangriaCentavos <= 0) p.push("Informe o valor da sangria de troco.");
   if (v.aberturaCentavos !== null && r.dinheiroLancarCentavos < 0) {

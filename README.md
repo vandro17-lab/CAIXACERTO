@@ -20,6 +20,25 @@ que garante de verdade a unicidade e a correção única sob uso simultâneo.
 Fórmula (regra v1, fiel à planilha `P. CAIXA`):
 `Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco)`. Resultado negativo **bloqueia** a finalização.
 
+## Abertura do caixa como conferência
+
+- O valor de abertura vem do **último fechamento finalizado da mesma loja** antes deste (data, depois manhã, tarde,
+  noite; mesmo que seja de dias atrás): é o total bruto de "Dinheiro da gaveta" dele. A fórmula não muda.
+- Na etapa de abertura o funcionário vê "Confira se há R$ X na gaveta" e responde **Sim** ou **Não**.
+  - **Sim:** a abertura fica com esse valor.
+  - **Não:** o gerente confere junto e digita a **senha do gerente**; aí o funcionário informa o valor encontrado.
+    O fechamento fica marcado como **abertura com divergência** (esperado e encontrado) e a observação é obrigatória.
+    A marca aparece na conferência, no cupom, no resumo copiado, nas Consultas (e no CSV) e no detalhe do ADM.
+- Sem fechamento anterior finalizado, ou com a gaveta dele zerada, a abertura é digitada livremente, sem senha.
+- Quem decide o valor esperado e confere a senha é o **servidor** (`POST /fechamentos/:id/abertura`); a abertura
+  enviada no salvamento do rascunho é ignorada quando existe valor esperado. Mudar loja, data ou turno do rascunho
+  refaz a conferência.
+- **Correção única do funcionário:** mudar a abertura exige a senha do gerente. **Edição do ADM:** livre; a marca
+  de divergência acompanha o valor (some se a abertura voltar ao esperado).
+- **Senha do gerente:** uma só para todas as lojas, 4 dígitos, cadastrada pelo ADM em Configurações. No banco existe
+  apenas o hash bcrypt. Serve só para liberar a abertura; não dá acesso a Consultas nem a Configurações.
+  Limite de erros: 5 por fechamento e 15 por aparelho a cada 15 minutos, e 60 por hora no total.
+
 ## Rodar no computador
 
 ```bash
@@ -30,13 +49,15 @@ npm run build    # versão de produção em dist/
 ```
 
 A API local usa um Postgres embutido (pasta `.dados-locais`); não precisa de conta em nuvem.
+Depois de uma migração nova, apague a pasta `.dados-locais` para o banco local ser recriado.
 
 ## Publicar
 
 1. **Telas (Vercel):** importar este repositório na Vercel. Não há variáveis para configurar: o endereço da API
    está em `.env.production` (é público). O `vercel.json` já cuida das rotas.
 2. **Backend/banco (Supabase):** já publicados no projeto `caixacerto`. Para republicar depois de mudar o código:
-   `supabase functions deploy api --no-verify-jwt` e aplicar novas migrações de `supabase/migrations/`.
+   `supabase functions deploy api --no-verify-jwt` e aplicar novas migrações de `supabase/migrations/`
+   (enviar sempre TODOS os arquivos de `supabase/functions/api`, inclusive a pasta `dominio`).
    Depois de republicar, rodar `node ferramentas/conferir-rotas.mjs`: confere que todas as rotas respondem.
 3. **Restringir origem (recomendado):** depois de saber o endereço da Vercel, criar no Supabase o segredo
    `ORIGENS_PERMITIDAS` da função (ex.: `https://caixacerto.vercel.app`).

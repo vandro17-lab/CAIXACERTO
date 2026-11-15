@@ -45,7 +45,14 @@ export interface Config {
   parametros: Parametros;
   /** Na configuração pública, só os ativos; na do ADM, todos. */
   usuarios: Usuario[];
+  /** Só na configuração do ADM: já existe senha do gerente cadastrada? (a senha em si nunca sai do servidor) */
+  senhaGerenteCadastrada?: boolean;
 }
+
+/** Resposta do funcionário à conferência da abertura. O valor esperado é sempre o do servidor. */
+export type CorpoAbertura =
+  | { confere: true; esperadoCentavos: number }
+  | { confere: false; esperadoCentavos: number; valorCentavos: number; senhaGerente: string };
 
 export interface Identificacao {
   lojaId: string;
@@ -78,9 +85,11 @@ export interface CorpoCorrecao {
   sangriaCentavos: number;
   lancamentos: Lancamento[];
   confirmacao: Confirmacao;
+  /** Obrigatória quando a correção muda a abertura. */
+  senhaGerente?: string;
 }
 
-export type CorpoEdicaoAdm = Omit<CorpoCorrecao, "requisicaoId" | "autorDeclarado">;
+export type CorpoEdicaoAdm = Omit<CorpoCorrecao, "requisicaoId" | "autorDeclarado" | "senhaGerente">;
 
 export interface SessaoAdm {
   token: string;
@@ -111,6 +120,7 @@ export const api = {
   obter: (id: string, token: string) => pedir<ComFechamento>("GET", `/fechamentos/${id}`, undefined, t(token)),
   salvar: (id: string, token: string, dados: DadosRascunho, revisao: number) =>
     pedir<ComFechamento & { aplicado: boolean }>("PUT", `/fechamentos/${id}/rascunho`, { ...dados, revisao }, t(token)),
+  conferirAbertura: (id: string, token: string, corpo: CorpoAbertura) => pedir<ComFechamento>("POST", `/fechamentos/${id}/abertura`, corpo, t(token)),
   finalizar: (id: string, token: string, revisao: number, confirmacao: Confirmacao) =>
     pedir<ComFechamento>("POST", `/fechamentos/${id}/finalizar`, { revisao, confirmacao }, t(token)),
   corrigir: (id: string, token: string, corpo: CorpoCorrecao) => pedir<ComFechamento>("POST", `/fechamentos/${id}/corrigir`, corpo, t(token)),
@@ -135,5 +145,6 @@ export const api = {
       pedir<Config>("PUT", `/admin/${qual}/${id}`, mudanca, a(s)),
     ordenarFormas: (s: string, ids: string[]) => pedir<Config>("PUT", "/admin/formas-pagamento-ordem", { ids }, a(s)),
     salvarParametros: (s: string, p: Partial<Parametros>) => pedir<Config>("PUT", "/admin/parametros", p, a(s)),
+    salvarSenhaGerente: (s: string, senha: string) => pedir<Config>("PUT", "/admin/senha-gerente", { senha }, a(s)),
   },
 };

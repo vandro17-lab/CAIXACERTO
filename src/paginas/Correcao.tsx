@@ -12,6 +12,7 @@ import { usuariosDaLoja } from "../componentes/FormIdentificacao.tsx";
 import { Aviso, Moldura } from "../componentes/Moldura.tsx";
 import { PainelColunas } from "../componentes/PainelColunas.tsx";
 import { FormulaDinheiro } from "../componentes/Resumo.tsx";
+import { CampoSenhaGerente } from "../componentes/ConferenciaAbertura.tsx";
 import { CampoSangria } from "./Assistente.tsx";
 
 interface Props {
@@ -45,8 +46,15 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
   // Mesma requisição em caso de reenvio: o servidor reconhece e não aplica duas vezes.
   const [requisicaoId] = useState(novoId);
 
+  const [senhaGerente, setSenhaGerente] = useState("");
+
   const depois = useMemo(() => montarResumo(valores, config.formas), [valores, config.formas]);
-  const pend = pendencias(valores, depois);
+  // Mudar a abertura exige a senha do gerente; se ficar diferente do esperado, a observação é obrigatória.
+  const esperado = f.abertura.esperadoCentavos;
+  const mudouAbertura = valores.aberturaCentavos !== f.aberturaCentavos;
+  const divergente = esperado !== null && valores.aberturaCentavos !== null && valores.aberturaCentavos !== esperado;
+  const pend = pendencias(valores, depois, { situacao: divergente ? "divergente" : "livre", observacao });
+  const senhaOk = !mudouAbertura || /^\d{4}$/.test(senhaGerente);
   const formas = config.formas.filter((x) => x.ativa || f.lancamentos.some((l) => l.formaId === x.formaId));
 
   if (f.quantidadeCorrecoes > 0) return <Navigate replace to={`/f/${f.id}`} />;
@@ -65,7 +73,7 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
 
   async function confirmar() {
     setTentou(true);
-    if (!motivoOk || !autorOk || pend.length || !mudou || !ciente) return;
+    if (!motivoOk || !autorOk || !senhaOk || pend.length || !mudou || !ciente) return;
     setEnviando(true);
     setFalha(null);
     try {
@@ -76,6 +84,7 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
         motivo,
         observacao,
         ...valores,
+        ...(mudouAbertura ? { senhaGerente } : {}),
         confirmacao: { dinheiroLancarCentavos: depois.dinheiroLancarCentavos, totalLancarCentavos: depois.totalLancarCentavos },
       });
       navegar(`/f/${f.id}`, { replace: true });
@@ -129,7 +138,20 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
       <h2>Abertura e sangria</h2>
       <div className="grade-resumo">
         <div className="pilha">
-          <CampoMoeda rotulo="Valor de abertura" valor={valores.aberturaCentavos} aoMudar={(c) => setValores((v) => ({ ...v, aberturaCentavos: c }))} />
+          <CampoMoeda
+            rotulo="Valor de abertura"
+            valor={valores.aberturaCentavos}
+            ajuda={`Para mudar a abertura é preciso a senha do gerente.${esperado === null ? "" : ` Valor esperado: ${formatarReais(esperado)}.`}`}
+            aoMudar={(c) => setValores((v) => ({ ...v, aberturaCentavos: c }))}
+          />
+          {mudouAbertura && (
+            <CampoSenhaGerente valor={senhaGerente} aoMudar={setSenhaGerente} erro={tentou && !senhaOk} />
+          )}
+          {divergente && (
+            <Aviso tipo="alerta">
+              Abertura com divergência: esperado {formatarReais(esperado)}, encontrado {formatarReais(valores.aberturaCentavos ?? 0)}. Explique na observação o que aconteceu.
+            </Aviso>
+          )}
           <CampoSangria
             houve={valores.houveSangria}
             centavos={valores.sangriaCentavos}
@@ -141,7 +163,7 @@ export function Correcao({ f, config, token, aoCorrigir }: Props) {
 
       <div className="campo">
         <label className="campo-rotulo" htmlFor="cor-obs">
-          Observação <span className="opcional">opcional</span>
+          Observação <span className="opcional">{divergente ? "obrigatória" : "opcional"}</span>
         </label>
         <textarea id="cor-obs" className="entrada" rows={3} maxLength={2000} value={observacao} onChange={(e) => setObservacao(e.target.value)} />
       </div>

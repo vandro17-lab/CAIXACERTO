@@ -15,6 +15,9 @@ export function textoResumo(s: Snapshot, mostrarZerados: boolean): string {
     ...formas.map((f) => `${f.nome}: ${formatarReais(f.subtotalCentavos)}`),
     `Dinheiro: ${formatarReais(s.dinheiroLancarCentavos)}`,
     `TOTAL A LANÇAR: ${formatarReais(s.totalLancarCentavos)}`,
+    ...(s.aberturaDivergente
+      ? ["", `Abertura com divergência: esperado ${formatarReais(s.aberturaDivergente.esperadoCentavos)}, encontrado ${formatarReais(s.aberturaDivergente.encontradoCentavos)}`]
+      : []),
     ...(s.observacao ? ["", `Observação: ${s.observacao}`] : []),
     ...(s.versao > 1 ? ["", `(Fechamento alterado após a finalização — versão ${s.versao})`] : []),
   ].join("\n");

@@ -1,17 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { montarResumo, pendencias } from "@dominio/calculo.ts";
+import { MIN_OBSERVACAO_DIVERGENCIA, montarResumo, pendencias } from "@dominio/calculo.ts";
 import { formatarReais } from "@dominio/dinheiro.ts";
 import { formatarData, NOME_TURNO } from "@dominio/tipos.ts";
 import type { Fechamento, Turno } from "@dominio/tipos.ts";
 import { api, FalhaApi } from "../api.ts";
-import type { Config } from "../api.ts";
+import type { Config, CorpoAbertura } from "../api.ts";
+import { EtapaAbertura } from "../componentes/ConferenciaAbertura.tsx";
 import { CampoMoeda } from "../componentes/CampoMoeda.tsx";
 import { ColunaLancamentos } from "../componentes/ColunaLancamentos.tsx";
 import { faltasIdentificacao, FormIdentificacao } from "../componentes/FormIdentificacao.tsx";
 import { Aviso, Moldura } from "../componentes/Moldura.tsx";
 import { PainelColunas } from "../componentes/PainelColunas.tsx";
-import { FormulaDinheiro, ListaLancar } from "../componentes/Resumo.tsx";
+import { FormulaDinheiro, ListaLancar, textoDivergencia } from "../componentes/Resumo.tsx";
 import { novoId } from "../armazenamento.ts";
 import { useRascunho } from "../useRascunho.ts";
 import type { Situacao } from "../useRascunho.ts";
@@ -44,14 +45,34 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
   const navegar = useNavigate();
   const etapa = useParams()["*"] ?? "";
   const indice = ETAPAS.findIndex((e) => e.caminho === etapa);
-  const { dados, situacao, erro, alterar, salvarAgora, revisao } = useRascunho({ inicial, token, aoDivergir: aoMudarNoServidor });
+  // Conferência da abertura: quem decide o valor esperado e a situação é sempre o servidor.
+  const [abertura, setAbertura] = useState(inicial.abertura);
+  const situacaoAbertura = useRef(inicial.abertura.situacao);
+  const sincronizar = useRef<(f: Fechamento) => void>(() => {});
+  const { dados, situacao, erro, alterar, adotarAbertura, salvarAgora, revisao } = useRascunho({
+    inicial,
+    token,
+    aoDivergir: aoMudarNoServidor,
+    aoSalvar: (f) => sincronizar.current(f),
+  });
+  sincronizar.current = (f) => {
+    // Só quando a abertura é (e continua) digitada livremente vale o que está na tela.
+    const digitada = situacaoAbertura.current === "livre" && f.abertura.situacao === "livre";
+    situacaoAbertura.current = f.abertura.situacao;
+    setAbertura(f.abertura);
+    if (!digitada) adotarAbertura(f.aberturaCentavos);
+  };
   const [tentou, setTentou] = useState(false);
   const [conferido, setConferido] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
 
   const resumo = useMemo(() => montarResumo(dados, config.formas), [dados, config.formas]);
-  const pend = pendencias(dados, resumo);
+  const pend = pendencias(dados, resumo, { situacao: abertura.situacao, observacao: dados.observacao });
+  const divergencia =
+    abertura.situacao === "divergente" && abertura.esperadoCentavos !== null && dados.aberturaCentavos !== null
+      ? { esperadoCentavos: abertura.esperadoCentavos, encontradoCentavos: dados.aberturaCentavos }
+      : undefined;
   const formas = config.formas.filter((f) => f.ativa || dados.lancamentos.some((l) => l.formaId === f.formaId));
   const loja = config.lojas.find((l) => l.lojaId === dados.lojaId)?.nome ?? inicial.lojaNome;
   const base = `/f/${inicial.id}`;
@@ -76,9 +97,24 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
       setEnviando(false);
       if (!ok) return;
     }
-    if (etapa === "abertura" && dados.aberturaCentavos === null) return;
+    if (etapa === "abertura") {
+      if (abertura.situacao === "pendente" || dados.aberturaCentavos === null) return;
+      if (abertura.situacao === "divergente" && dados.observacao.trim().length < MIN_OBSERVACAO_DIVERGENCIA) return;
+    }
     if (etapa === "dinheiro" && !sangriaOk) return;
     ir(indice + 1);
+  }
+
+  async function responderAbertura(corpo: CorpoAbertura): Promise<string | null> {
+    try {
+      sincronizar.current((await api.conferirAbertura(inicial.id, token, corpo)).fechamento);
+      return null;
+    } catch (e) {
+      const f = e instanceof FalhaApi ? e : null;
+      // O valor esperado mudou (ou deixou de existir): mostra o estado atual do servidor.
+      if (f?.dados.fechamento) sincronizar.current(f.dados.fechamento as Fechamento);
+      return f?.message ?? "Falha inesperada. Tente de novo.";
+    }
   }
 
   async function finalizar() {
@@ -140,19 +176,17 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
       )}
 
       {etapa === "abertura" && (
-        <section>
-          <h1>Abertura do caixa</h1>
-          <p className="subtitulo">Valor em dinheiro que você recebeu ao abrir o caixa. Se não recebeu nada, digite 0.</p>
-          <CampoMoeda
-            rotulo="Valor de abertura"
-            grande
-            autoFocus
-            valor={dados.aberturaCentavos}
-            aoMudar={(c) => alterar((d) => ({ ...d, aberturaCentavos: c }))}
-            aoEnter={() => void continuar()}
-          />
-          {tentou && dados.aberturaCentavos === null && <Aviso tipo="erro">Informe o valor de abertura (zero é permitido).</Aviso>}
-        </section>
+        <EtapaAbertura
+          key={abertura.situacao === "livre" ? "livre" : "conferencia"}
+          abertura={abertura}
+          valor={dados.aberturaCentavos}
+          observacao={dados.observacao}
+          tentou={tentou}
+          aoDigitar={(c) => alterar((d) => ({ ...d, aberturaCentavos: c }))}
+          aoObservar={(observacao) => alterar((d) => ({ ...d, observacao }))}
+          aoResponder={responderAbertura}
+          aoEnter={() => void continuar()}
+        />
       )}
 
       {etapa === "lancamentos" && (
@@ -191,7 +225,7 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
               {tentou && !sangriaOk && (
                 <Aviso tipo="erro">{dados.houveSangria === null ? "Informe se houve sangria de troco." : "Informe o valor da sangria de troco."}</Aviso>
               )}
-              <FormulaDinheiro r={resumo} titulo="Cálculo do dinheiro a lançar" />
+              <FormulaDinheiro r={resumo} titulo="Cálculo do dinheiro a lançar" divergencia={divergencia} />
               {dados.aberturaCentavos !== null && resumo.dinheiroLancarCentavos < 0 && (
                 <Aviso tipo="alerta">
                   O dinheiro a lançar está negativo. Enquanto estiver assim, o fechamento não pode ser finalizado: confira a abertura, a sangria e o dinheiro da gaveta.
@@ -223,16 +257,21 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
                 </p>
               </div>
               <div>
-                <FormulaDinheiro r={resumo} />
+                <FormulaDinheiro r={resumo} divergencia={divergencia} />
                 <p className="links-edicao">
                   <button type="button" className="link" onClick={() => ir(1)}>Corrigir abertura</button>
                   <button type="button" className="link" onClick={() => ir(3)}>Corrigir dinheiro ou sangria</button>
                 </p>
               </div>
             </div>
+            {divergencia && (
+              <Aviso tipo="alerta">
+                <strong>{textoDivergencia(divergencia)}.</strong> Liberado com a senha do gerente; a observação é obrigatória.
+              </Aviso>
+            )}
             <div className="campo">
               <label className="campo-rotulo" htmlFor="obs-final">
-                Observação <span className="opcional">opcional</span>
+                Observação <span className="opcional">{divergencia ? "obrigatória" : "opcional"}</span>
               </label>
               <textarea
                 id="obs-final"

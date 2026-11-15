@@ -19,14 +19,20 @@ export const dadosDe = (f: Fechamento): DadosRascunho => ({
   lancamentos: f.lancamentos,
 });
 
-const valoresIguais = (a: DadosRascunho, b: DadosRascunho) =>
-  JSON.stringify([a.aberturaCentavos, a.houveSangria, a.lancamentos]) === JSON.stringify([b.aberturaCentavos, b.houveSangria, b.lancamentos]);
+// A abertura só é comparada quando é digitada livremente: nos outros casos quem manda é o servidor.
+const valoresIguais = (servidor: Fechamento, b: DadosRascunho) => {
+  const a = dadosDe(servidor);
+  const abertura = (d: DadosRascunho) => (servidor.abertura.situacao === "livre" ? d.aberturaCentavos : null);
+  return JSON.stringify([abertura(a), a.houveSangria, a.lancamentos]) === JSON.stringify([abertura(b), b.houveSangria, b.lancamentos]);
+};
 
 interface Opcoes {
   inicial: Fechamento;
   token: string;
   /** O servidor tem um estado diferente do nosso (finalizado ou alterado em outro aparelho). */
   aoDivergir(servidor: Fechamento | null): void;
+  /** Chamado a cada salvamento confirmado, com o estado devolvido pelo servidor. */
+  aoSalvar?(servidor: Fechamento): void;
 }
 
 /**
@@ -34,10 +40,13 @@ interface Opcoes {
  * Cada alteração ganha um número de revisão, fica guardada no aparelho e é enviada ao servidor,
  * uma requisição por vez. Só mostramos "salvo" depois da confirmação do servidor.
  */
-export function useRascunho({ inicial, token, aoDivergir }: Opcoes) {
+export function useRascunho({ inicial, token, aoDivergir, aoSalvar }: Opcoes) {
   const [inicio] = useState(() => {
     const local = lerRascunhoLocal(inicial.id);
-    return local && local.revisao > inicial.revisao ? { ...local, pendente: true } : { dados: dadosDe(inicial), revisao: inicial.revisao, pendente: false };
+    if (!(local && local.revisao > inicial.revisao)) return { dados: dadosDe(inicial), revisao: inicial.revisao, pendente: false };
+    // Abertura conferida (ou aguardando conferência): vale a do servidor, não a guardada no aparelho.
+    const dados = inicial.abertura.situacao === "livre" ? local.dados : { ...local.dados, aberturaCentavos: inicial.aberturaCentavos };
+    return { dados, revisao: local.revisao, pendente: true };
   });
   const [dados, setDados] = useState<DadosRascunho>(inicio.dados);
   const [situacao, setSituacao] = useState<Situacao>(inicio.pendente ? "pendente" : "salvo");
@@ -52,6 +61,8 @@ export function useRascunho({ inicial, token, aoDivergir }: Opcoes) {
   });
   const divergir = useRef(aoDivergir);
   divergir.current = aoDivergir;
+  const salvou = useRef(aoSalvar);
+  salvou.current = aoSalvar;
 
   const enviar = useCallback(async (): Promise<boolean> => {
     const e = r.current;
@@ -65,7 +76,7 @@ export function useRascunho({ inicial, token, aoDivergir }: Opcoes) {
     e.envio = (async () => {
       try {
         const resp = await api.salvar(inicial.id, token, enviados, revisao);
-        if (!resp.aplicado && !(resp.fechamento.revisao === revisao && valoresIguais(dadosDe(resp.fechamento), enviados))) {
+        if (!resp.aplicado && !(resp.fechamento.revisao === revisao && valoresIguais(resp.fechamento, enviados))) {
           // Outro aparelho gravou este rascunho: vale o que está no servidor.
           guardarRascunhoLocal(inicial.id, null);
           divergir.current(resp.fechamento);
@@ -73,6 +84,7 @@ export function useRascunho({ inicial, token, aoDivergir }: Opcoes) {
         }
         e.salva = revisao;
         if (e.revisao === revisao) guardarRascunhoLocal(inicial.id, null);
+        if (e.vivo && resp.aplicado) salvou.current?.(resp.fechamento);
         if (e.vivo) {
           setErro(null);
           setSituacao(e.revisao === revisao ? "salvo" : "pendente");
@@ -128,5 +140,17 @@ export function useRascunho({ inicial, token, aoDivergir }: Opcoes) {
     };
   }, [enviar]);
 
-  return { dados, situacao, erro, alterar, salvarAgora: enviar, revisao: () => r.current.revisao };
+  /** Adota a abertura decidida pelo servidor. Não gera novo salvamento: o servidor já tem esse valor. */
+  const adotarAbertura = useCallback(
+    (aberturaCentavos: number | null) => {
+      const e = r.current;
+      if (e.dados.aberturaCentavos === aberturaCentavos) return;
+      e.dados = { ...e.dados, aberturaCentavos };
+      if (e.revisao > e.salva) guardarRascunhoLocal(inicial.id, { revisao: e.revisao, dados: e.dados });
+      setDados(e.dados);
+    },
+    [inicial.id],
+  );
+
+  return { dados, situacao, erro, alterar, adotarAbertura, salvarAgora: enviar, revisao: () => r.current.revisao };
 }

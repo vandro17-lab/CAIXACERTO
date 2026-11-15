@@ -2,9 +2,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
-import type { Lancamento, Snapshot } from "@dominio/tipos.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ConferenciaAbertura, Lancamento, Snapshot } from "@dominio/tipos.ts";
+import type { CorpoAbertura } from "../src/api.ts";
 import { ColunaLancamentos } from "../src/componentes/ColunaLancamentos.tsx";
+import { EtapaAbertura } from "../src/componentes/ConferenciaAbertura.tsx";
 import { montarCsv, montarRelatorio } from "../src/paginas/admin/Consultas.tsx";
 import { textoResumo } from "../src/resumoTexto.ts";
 
@@ -111,12 +113,78 @@ describe("resumo e relatórios", () => {
       id: "a", lojaId: "vila-grill-1", lojaNome: "Vila Grill 1", dataLocal: "2026-11-14", turno: "noite" as const, responsavelNome: "Maria",
       status: "finalizado" as const, versao: 1, quantidadeCorrecoes: 0, quantidadeEdicoesAdm: 0, criadoEm: "", finalizadoEm: "",
       formas: [{ formaId: "credito", nome: "Crédito", subtotalCentavos: 15500 }], dinheiroLancarCentavos: 70000, totalLancarCentavos: 85500,
+      aberturaDivergente: null,
     };
     const rascunho = { ...item, id: "b", status: "rascunho" as const, formas: [], dinheiroLancarCentavos: null, totalLancarCentavos: null };
     const r = montarRelatorio([item, { ...item, id: "c" }, rascunho]);
     expect(r).toMatchObject({ quantidade: 2, dinheiro: 140000, total: 171000 });
     expect(r.formas).toEqual([{ nome: "Crédito", total: 31000 }]);
     const csv = montarCsv([item, rascunho]);
-    expect(csv.split("\r\n")[1]).toBe('"14/11/2026";"Noite";"Vila Grill 1";"Maria";"Finalizado";"Não";"155,00";"700,00";"855,00"');
+    expect(csv.split("\r\n")[1]).toBe('"14/11/2026";"Noite";"Vila Grill 1";"Maria";"Finalizado";"Não";"155,00";"700,00";"855,00";"Não"');
+  });
+});
+
+describe("etapa de abertura", () => {
+  const ESPERADO: ConferenciaAbertura = { situacao: "pendente", esperadoCentavos: 60000, origem: { dataLocal: "2026-11-14", turno: "manha" }, anteriorEmRascunho: false };
+  const montar = (abertura: ConferenciaAbertura, valor: number | null = null, aoResponder = vi.fn(async (_: CorpoAbertura) => null as string | null)) => {
+    const aoDigitar = vi.fn();
+    render(<EtapaAbertura abertura={abertura} valor={valor} observacao="" tentou={false} aoDigitar={aoDigitar} aoObservar={() => {}} aoResponder={aoResponder} aoEnter={() => {}} />);
+    return { aoResponder, aoDigitar };
+  };
+
+  it("com fechamento anterior, mostra o valor para conferir e não deixa digitar a abertura", async () => {
+    const u = userEvent.setup();
+    const { aoResponder } = montar(ESPERADO);
+    expect(screen.getByText(/Confira se há/).textContent).toBe("Confira se há R$ 600,00 na gaveta");
+    expect(screen.getByText(/14\/11\/2026 · Manhã/)).toBeTruthy();
+    expect(screen.queryByLabelText("Valor de abertura")).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Sim" }));
+    expect(aoResponder).toHaveBeenCalledWith({ confere: true, esperadoCentavos: 60000 });
+  });
+
+  it("Não: pede o valor encontrado e a senha do gerente (4 dígitos) antes de enviar", async () => {
+    const u = userEvent.setup();
+    const { aoResponder } = montar(ESPERADO);
+    await u.click(screen.getByRole("button", { name: "Não" }));
+    expect(screen.getByText(/Chame o gerente/)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: /Liberar com a senha do gerente/ }));
+    expect(aoResponder).not.toHaveBeenCalled();
+    await u.type(screen.getByLabelText("Valor encontrado na gaveta"), "550");
+    await u.type(screen.getByLabelText("Senha do gerente"), "12a345");
+    expect((screen.getByLabelText("Senha do gerente") as HTMLInputElement).value).toBe("1234");
+    await u.click(screen.getByRole("button", { name: /Liberar com a senha do gerente/ }));
+    expect(aoResponder).toHaveBeenCalledWith({ confere: false, esperadoCentavos: 60000, valorCentavos: 55000, senhaGerente: "1234" });
+  });
+
+  it("mostra o erro do servidor (senha incorreta) e mantém o formulário aberto", async () => {
+    const u = userEvent.setup();
+    montar(ESPERADO, null, vi.fn(async () => "Senha do gerente incorreta."));
+    await u.click(screen.getByRole("button", { name: "Não" }));
+    await u.type(screen.getByLabelText("Valor encontrado na gaveta"), "550");
+    await u.type(screen.getByLabelText("Senha do gerente"), "0000");
+    await u.click(screen.getByRole("button", { name: /Liberar com a senha do gerente/ }));
+    expect(screen.getByRole("alert").textContent).toContain("Senha do gerente incorreta.");
+    expect(screen.getByLabelText("Senha do gerente")).toBeTruthy();
+  });
+
+  it("divergência: mostra esperado e encontrado e exige a observação", () => {
+    montar({ ...ESPERADO, situacao: "divergente" }, 55000);
+    expect(screen.getByText(/Abertura com divergência/)).toBeTruthy();
+    expect(screen.getByText(/encontrado R\$ 550,00/)).toBeTruthy();
+    expect(screen.getByLabelText(/Observação/)).toBeTruthy();
+  });
+
+  it("sem fechamento anterior, a abertura é digitada como antes", async () => {
+    const u = userEvent.setup();
+    const { aoDigitar } = montar({ situacao: "livre", esperadoCentavos: null, origem: null, anteriorEmRascunho: false });
+    await u.type(screen.getByLabelText("Valor de abertura"), "200");
+    expect(aoDigitar).toHaveBeenLastCalledWith(20000);
+    expect(screen.queryByRole("button", { name: "Sim" })).toBeNull();
+  });
+
+  it("o resumo copiado leva a marca de abertura com divergência", () => {
+    const texto = textoResumo({ ...SNAPSHOT, aberturaDivergente: { esperadoCentavos: 60000, encontradoCentavos: 20000 } }, true);
+    expect(texto).toContain("Abertura com divergência: esperado R$ 600,00, encontrado R$ 200,00");
+    expect(textoResumo(SNAPSHOT, true)).not.toContain("divergência");
   });
 });

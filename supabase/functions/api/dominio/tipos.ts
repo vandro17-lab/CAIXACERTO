@@ -50,6 +50,31 @@ export interface Valores {
   lancamentos: Lancamento[];
 }
 
+/**
+ * Conferência da abertura do caixa.
+ * - `livre`: não há fechamento anterior com dinheiro na gaveta; a abertura é digitada.
+ * - `pendente`: há um valor esperado e o funcionário ainda não respondeu.
+ * - `sim`: o funcionário confirmou o valor esperado.
+ * - `divergente`: o valor encontrado é outro, liberado com a senha do gerente.
+ */
+export type SituacaoAbertura = "livre" | "pendente" | "sim" | "divergente";
+
+export interface ConferenciaAbertura {
+  situacao: SituacaoAbertura;
+  /** Dinheiro da gaveta do fechamento anterior finalizado da mesma loja; quem decide é o servidor. */
+  esperadoCentavos: number | null;
+  /** De qual fechamento veio o valor esperado. */
+  origem: { dataLocal: string; turno: Turno } | null;
+  /** O fechamento imediatamente anterior da loja ainda está em rascunho (o esperado vem de um mais antigo). */
+  anteriorEmRascunho: boolean;
+}
+
+/** Marca de "abertura com divergência": o que o servidor esperava e o que foi encontrado na gaveta. */
+export interface DivergenciaAbertura {
+  esperadoCentavos: number;
+  encontradoCentavos: number;
+}
+
 export interface ResumoForma {
   formaId: string;
   nome: string;
@@ -87,6 +112,8 @@ export interface Snapshot extends Resumo {
   registradoEm: string;
   /** Itens cujo valor atual foi definido por uma edição do administrador (ver `diferencas`). */
   alteradoPeloAdm?: string[];
+  /** Presente quando a abertura ficou diferente do dinheiro da gaveta do fechamento anterior. */
+  aberturaDivergente?: DivergenciaAbertura;
 }
 
 export type StatusFechamento = "rascunho" | "finalizado";
@@ -110,6 +137,7 @@ export interface Fechamento extends Valores {
   finalizadoEm: string | null;
   atualizadoEm: string;
   snapshot: Snapshot | null;
+  abertura: ConferenciaAbertura;
 }
 
 export interface Alteracao {
@@ -140,6 +168,7 @@ export interface ItemConsulta {
   formas: { formaId: string; nome: string; subtotalCentavos: number }[];
   dinheiroLancarCentavos: number | null;
   totalLancarCentavos: number | null;
+  aberturaDivergente: DivergenciaAbertura | null;
 }
 
 /** Corpo de erro devolvido pela API. */

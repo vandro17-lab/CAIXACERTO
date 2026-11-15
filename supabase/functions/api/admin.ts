@@ -160,6 +160,7 @@ export async function consultar(c: Ctx): Promise<Response> {
       formas: (snap?.formas ?? []).map((f: Linha) => ({ formaId: f.formaId, nome: f.nome, subtotalCentavos: f.subtotalCentavos })),
       dinheiroLancarCentavos: snap ? l.dinheiro_lancar_centavos : null,
       totalLancarCentavos: snap ? l.total_lancar_centavos : null,
+      aberturaDivergente: snap?.aberturaDivergente ?? null,
     };
   });
   return json(200, { itens, truncado: linhas.length > 1000 });
@@ -219,6 +220,7 @@ async function configCompleta(c: Ctx): Promise<Response> {
     formas: await formasTodas(c.sql),
     parametros: await lerParametros(c.sql),
     usuarios: await usuariosTodos(c.sql),
+    senhaGerenteCadastrada: (await c.sql.q("select 1 as ok from gerente_credencial")).length > 0,
   });
 }
 
@@ -366,5 +368,25 @@ export async function salvarParametros(c: Ctx): Promise<Response> {
       [chave, String(valor)],
     );
   }
+  return configCompleta(c);
+}
+
+/**
+ * PUT /admin/senha-gerente { senha } — cadastra ou troca a senha do gerente (4 dígitos, a mesma para todas as lojas).
+ * Só o hash é guardado. A senha libera apenas a divergência de abertura; não abre consultas nem configurações.
+ */
+export async function salvarSenhaGerente(c: Ctx): Promise<Response> {
+  await exigirAdmin(c);
+  const senha = c.corpo.senha;
+  if (typeof senha !== "string" || !/^\d{4}$/.test(senha)) {
+    throw new ErroHttp(422, "DADOS_INVALIDOS", "Senha do gerente: informe exatamente 4 dígitos.", { campo: "Senha do gerente" });
+  }
+  await c.sql.q(
+    `insert into gerente_credencial (unica, senha_hash) values (true, $1::text)
+     on conflict (unica) do update set senha_hash = excluded.senha_hash, atualizado_em = now()`,
+    [await c.deps.hashSenha(senha)],
+  );
+  // Senha nova: zera as tentativas erradas acumuladas com a antiga.
+  await c.sql.q("delete from limites where chave like 'gerente:%'");
   return configCompleta(c);
 }
