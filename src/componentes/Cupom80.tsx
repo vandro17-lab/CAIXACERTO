@@ -25,28 +25,20 @@ interface Props {
   comMemoria: boolean;
 }
 
-const MM_POR_PX = 25.4 / 96;
-
 /**
  * O fechamento inteiro em formato de cupom para impressora térmica de 80 mm (Epson TM-T20 e similares).
- * Fica fora da tela e é a única coisa que vai para o papel. A altura da página é calculada na hora,
- * para a impressora cortar logo depois da última linha, sem sobra de bobina.
+ * Fica fora da tela e é a única coisa que vai para o papel, começando no topo da página.
+ * O tamanho do papel fica por conta da impressora: pedir um tamanho sob medida fazia a Epson
+ * empurrar o texto para o fim da página, gastando bobina em branco.
  */
 export function Cupom80({ dados, r, adm, mostrarZerados, comMemoria }: Props) {
   useEffect(() => {
     const raiz = document.documentElement;
     const estilo = document.createElement("style");
+    estilo.textContent = "@page { margin: 0; }";
     document.head.appendChild(estilo);
     raiz.classList.add("imprime-cupom");
-    const medir = () => {
-      const alturaPx = document.querySelector<HTMLElement>(".cupom80")?.scrollHeight ?? 0;
-      const alturaMm = Math.max(60, Math.ceil(alturaPx * MM_POR_PX) + 8);
-      estilo.textContent = `@page { size: 80mm ${alturaMm}mm; margin: 0; }`;
-    };
-    medir();
-    window.addEventListener("beforeprint", medir);
     return () => {
-      window.removeEventListener("beforeprint", medir);
       raiz.classList.remove("imprime-cupom");
       estilo.remove();
     };
@@ -81,7 +73,7 @@ export function Cupom80({ dados, r, adm, mostrarZerados, comMemoria }: Props) {
       {comMemoria && (
         <>
           <p className="c80-forte">CÁLCULO DO DINHEIRO</p>
-          {linha("Dinheiro contado" + marca("dinheiroContado"), formatarReais(r.dinheiroContadoCentavos))}
+          {linha("Dinheiro da gaveta" + marca("dinheiroContado"), formatarReais(r.dinheiroContadoCentavos))}
           {linha("(−) Abertura" + marca("abertura"), formatarReais(r.aberturaCentavos))}
           {linha("(+) Sangria de troco" + marca("sangria"), formatarReais(r.sangriaCentavos))}
           {linha("(=) Dinheiro a lançar" + marca("dinheiroLancar"), formatarReais(r.dinheiroLancarCentavos), "c80-forte")}
@@ -99,7 +91,7 @@ export function Cupom80({ dados, r, adm, mostrarZerados, comMemoria }: Props) {
       ))}
       {r.dinheiroContado.length > 0 && (
         <div className="c80-grupo">
-          {linha(`Dinheiro contado${marca("dinheiroContado")} (${r.dinheiroContado.length})`, formatarReais(r.dinheiroContadoCentavos), "c80-forte")}
+          {linha(`Dinheiro da gaveta${marca("dinheiroContado")} (${r.dinheiroContado.length})`, formatarReais(r.dinheiroContadoCentavos), "c80-forte")}
           <p className="c80-valores">{r.dinheiroContado.map(formatarNumero).join("  ")}</p>
         </div>
       )}

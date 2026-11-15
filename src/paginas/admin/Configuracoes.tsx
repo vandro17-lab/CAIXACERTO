@@ -105,7 +105,7 @@ export function Configuracoes() {
 
       <section className="bloco">
         <h2>Fórmula do dinheiro</h2>
-        <p className="formula">Dinheiro a lançar = Dinheiro contado − (Abertura − Sangria de troco)</p>
+        <p className="formula">Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco)</p>
         <p className="nota">Regra v1, fiel à planilha original. Não é editável: uma mudança exige nova versão documentada da regra.</p>
       </section>
 

@@ -1622,6 +1622,7 @@ textarea.entrada {
     display: none !important;
   }
 
+  /* Primeiro (e único) conteúdo da página: começa no topo, qualquer que seja o papel escolhido. */
   html.imprime-cupom .cupom80 {
     position: static;
   }

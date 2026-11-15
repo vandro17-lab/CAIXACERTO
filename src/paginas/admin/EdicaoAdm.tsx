@@ -65,7 +65,7 @@ function Editor({ f, antes, formasTodas }: { f: Fechamento; antes: Snapshot; for
     ...depois.formas.map((x) => ({ chave: `forma:${x.formaId}`, nome: x.nome, antes: antes.formas.find((a) => a.formaId === x.formaId)?.subtotalCentavos ?? 0, depois: x.subtotalCentavos })),
     { chave: "abertura", nome: "Abertura", antes: antes.aberturaCentavos, depois: depois.aberturaCentavos },
     { chave: "sangria", nome: "Sangria de troco", antes: antes.sangriaCentavos, depois: depois.sangriaCentavos },
-    { chave: "dinheiroContado", nome: "Dinheiro contado", antes: antes.dinheiroContadoCentavos, depois: depois.dinheiroContadoCentavos },
+    { chave: "dinheiroContado", nome: "Dinheiro da gaveta", antes: antes.dinheiroContadoCentavos, depois: depois.dinheiroContadoCentavos },
     { chave: "dinheiroLancar", nome: "Dinheiro a lançar (calculado)", antes: antes.dinheiroLancarCentavos, depois: depois.dinheiroLancarCentavos },
     { chave: "total", nome: "Total a lançar", antes: antes.totalLancarCentavos, depois: depois.totalLancarCentavos },
   ];

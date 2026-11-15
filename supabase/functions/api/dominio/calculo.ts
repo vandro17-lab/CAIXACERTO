@@ -1,5 +1,5 @@
 // Regra de cálculo v1 — reproduz a cadeia de fórmulas da aba P. CAIXA:
-//   O11 = soma da coluna DINHEIRO            → dinheiro contado
+//   O11 = soma da coluna DINHEIRO            → dinheiro da gaveta
 //   O14 = ABERTURA − SANGRIA TROCO           → ajuste
 //   I16 = O11 − O14  ("VALOR DO CAIXA")      → dinheiro a lançar
 // Qualquer mudança aqui exige nova versão documentada da regra (v2) e testes,
@@ -58,7 +58,7 @@ export function pendencias(v: Valores, r: Resumo): string[] {
   if (v.aberturaCentavos !== null && r.dinheiroLancarCentavos < 0) {
     p.push(
       `O dinheiro a lançar ficou negativo (${formatarReais(r.dinheiroLancarCentavos)}). ` +
-        "O dinheiro contado é menor que a abertura menos a sangria. Confira a abertura, a sangria e o dinheiro contado.",
+        "O dinheiro da gaveta é menor que a abertura menos a sangria. Confira a abertura, a sangria e o dinheiro da gaveta.",
     );
   }
   return p;

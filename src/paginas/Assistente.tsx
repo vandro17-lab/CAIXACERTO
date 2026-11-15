@@ -172,7 +172,7 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
           <p className="subtitulo">Conte o dinheiro que está no caixa agora. O valor a lançar é calculado — não digite ele.</p>
           <div className="grade-dinheiro">
             <ColunaLancamentos
-              titulo="Dinheiro contado"
+              titulo="Dinheiro da gaveta"
               dinheiro
               autoFocus
               itens={dados.lancamentos.filter((l) => l.tipo === "dinheiro_contado")}
@@ -194,7 +194,7 @@ export function Assistente({ inicial, config, token, aoMudarNoServidor }: Props)
               <FormulaDinheiro r={resumo} titulo="Cálculo do dinheiro a lançar" />
               {dados.aberturaCentavos !== null && resumo.dinheiroLancarCentavos < 0 && (
                 <Aviso tipo="alerta">
-                  O dinheiro a lançar está negativo. Enquanto estiver assim, o fechamento não pode ser finalizado: confira a abertura, a sangria e o dinheiro contado.
+                  O dinheiro a lançar está negativo. Enquanto estiver assim, o fechamento não pode ser finalizado: confira a abertura, a sangria e o dinheiro da gaveta.
                 </Aviso>
               )}
             </div>

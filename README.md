@@ -18,7 +18,7 @@ lançar no sistema oficial. Especificação: seção por seção de `PROJETO_FEC
 que garante de verdade a unicidade e a correção única sob uso simultâneo.
 
 Fórmula (regra v1, fiel à planilha `P. CAIXA`):
-`Dinheiro a lançar = Dinheiro contado − (Abertura − Sangria de troco)`. Resultado negativo **bloqueia** a finalização.
+`Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco)`. Resultado negativo **bloqueia** a finalização.
 
 ## Rodar no computador
 
@@ -49,8 +49,9 @@ A API local usa um Postgres embutido (pasta `.dados-locais`); não precisa de co
   for preciso, exige motivo, fica no histórico e não consome a correção única do funcionário. Os valores alterados
   pelo ADM aparecem em azul nas telas e com `*` no cupom.
 - **Impressão (80 mm):** o botão "Imprimir cupom (80 mm)" gera o fechamento inteiro (valores, cálculo, lançamentos e
-  observação) na largura de bobina de 80 mm (Epson TM-T20). Na janela de impressão: escolher a Epson, margens
-  "Nenhuma" e escala 100%. A altura do papel é calculada sozinha.
+  observação) na largura de bobina de 80 mm (Epson TM-T20), começando no topo do papel. Na janela de impressão:
+  escolher a Epson, papel de rolo 80 mm, margens "Nenhuma" e escala 100%. Para cortar logo após o texto, ligar
+  a economia de papel nas preferências do driver da Epson.
 
 ## Administrador
 

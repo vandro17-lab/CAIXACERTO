@@ -4,7 +4,7 @@ import type { Snapshot } from "@dominio/tipos.ts";
 
 /**
  * Texto do botão "Copiar resumo": a lista para lançar no sistema oficial.
- * A linha Dinheiro leva o valor CALCULADO, nunca o dinheiro contado.
+ * A linha Dinheiro leva o valor CALCULADO, nunca o dinheiro da gaveta.
  */
 export function textoResumo(s: Snapshot, mostrarZerados: boolean): string {
   const formas = s.formas.filter((f) => mostrarZerados || f.subtotalCentavos !== 0);
