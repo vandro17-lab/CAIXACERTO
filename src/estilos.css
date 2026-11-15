@@ -259,14 +259,49 @@ kbd {
 .inicio-topo {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   margin-bottom: 2rem;
 }
 
-.inicio-marca {
-  font-weight: 800;
+.inicio-topo .logo {
+  filter: drop-shadow(0 6px 14px rgb(6 84 22 / 28%));
+}
+
+.inicio-lema {
+  margin-top: 0.35rem;
+  font-size: 1.1rem;
+  font-weight: 700;
   color: var(--verde);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
+}
+
+@media (max-width: 26rem) {
+  .inicio-topo {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+  }
+}
+
+.instalar {
+  margin-top: 2rem;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+}
+
+.instalar p {
+  flex: 1 1 14rem;
+  font-weight: 500;
+}
+
+.instalar strong {
+  display: block;
 }
 
 .lista-cartoes {

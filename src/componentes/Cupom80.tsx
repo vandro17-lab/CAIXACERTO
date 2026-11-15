@@ -108,6 +108,7 @@ export function Cupom80({ dados, r, adm, mostrarZerados, comMemoria }: Props) {
 
       <p className="c80-assinatura">Responsável</p>
       <p className="c80-assinatura">Conferido por</p>
+      <p className="c80-centro c80-pequeno">Caixa conferido é Caixa Certo.</p>
       <p className="c80-centro c80-pequeno">
         Impresso em {new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
       </p>

@@ -1,11 +1,20 @@
 {
+  "id": "/",
   "name": "Caixa Certo",
   "short_name": "Caixa Certo",
-  "description": "Fechamento de caixa por loja, data e turno.",
+  "description": "Caixa conferido é Caixa Certo. Fechamento de caixa por loja, data e turno.",
   "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f6f4ee",
-  "theme_color": "#0e6b4f",
-  "icons": [{ "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+  "theme_color": "#065416",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    { "src": "/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }

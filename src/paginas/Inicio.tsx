@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { formatarData, NOME_TURNO } from "@dominio/tipos.ts";
 import { conhecidos } from "../armazenamento.ts";
-import { Etiqueta, Logo } from "../componentes/Moldura.tsx";
+import { Instalar } from "../componentes/Instalar.tsx";
+import { Etiqueta, LEMA, Logo } from "../componentes/Moldura.tsx";
 
 export function Inicio() {
   const recentes = conhecidos().slice(0, 6);
@@ -9,10 +10,10 @@ export function Inicio() {
     <div className="app">
       <main className="conteudo inicio">
         <header className="inicio-topo">
-          <Logo tamanho={52} />
+          <Logo tamanho={132} />
           <div>
-            <p className="inicio-marca">Caixa Certo</p>
-            <h1>Fechamento de Caixa</h1>
+            <h1>Fechamento de caixa</h1>
+            <p className="inicio-lema">{LEMA}</p>
           </div>
         </header>
 
@@ -58,6 +59,8 @@ export function Inicio() {
           </div>
           <p className="nota">Consultas e Configurações pedem a senha do administrador.</p>
         </section>
+
+        <Instalar />
       </main>
     </div>
   );
