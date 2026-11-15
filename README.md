@@ -59,8 +59,9 @@ Depois de uma migração nova, apague a pasta `.dados-locais` para o banco local
    `supabase functions deploy api --no-verify-jwt` e aplicar novas migrações de `supabase/migrations/`
    (enviar sempre TODOS os arquivos de `supabase/functions/api`, inclusive a pasta `dominio`).
    Depois de republicar, rodar `node ferramentas/conferir-rotas.mjs`: confere que todas as rotas respondem.
-3. **Restringir origem (recomendado):** depois de saber o endereço da Vercel, criar no Supabase o segredo
-   `ORIGENS_PERMITIDAS` da função (ex.: `https://caixacerto.vercel.app`).
+3. **Origem restrita (feito):** o segredo `ORIGENS_PERMITIDAS` da função vale `https://caixa-certooo.vercel.app`.
+   A API só libera o navegador vindo desse endereço. O valor é comparado exatamente: **sem barra no final**.
+   Para mais de um endereço, separar por vírgula. Sem o segredo, a API aceita qualquer origem.
 
 ## Usuários, edição do ADM e impressão
 
