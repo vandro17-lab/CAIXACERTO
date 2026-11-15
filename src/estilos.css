@@ -5,10 +5,10 @@
   --fundo: #f6f4ee;
   --superficie: #ffffff;
   --superficie-2: #efece3;
-  --tinta: #1b2320;
-  --tinta-suave: #56635d;
-  --borda: #dcd8cc;
-  --borda-forte: #b9b4a6;
+  --tinta: #101614;
+  --tinta-suave: #38443f;
+  --borda: #bfb9a8;
+  --borda-forte: #857f70;
   --verde: #0e6b4f;
   --verde-escuro: #0a5540;
   --verde-claro: #e2f1ea;
@@ -30,10 +30,10 @@
     --fundo: #111614;
     --superficie: #1a211f;
     --superficie-2: #222b28;
-    --tinta: #e9eeeb;
-    --tinta-suave: #a2afa9;
-    --borda: #2e3935;
-    --borda-forte: #47554f;
+    --tinta: #f4f7f5;
+    --tinta-suave: #c6d0cb;
+    --borda: #46544e;
+    --borda-forte: #6f8078;
     --verde: #46c79a;
     --verde-escuro: #6ad6ae;
     --verde-claro: #16332a;
@@ -1104,14 +1104,26 @@ textarea.entrada {
 .observacao {
   margin-top: 1.25rem;
   padding: 0.9rem 1.1rem;
-  background: var(--superficie);
-  border: 1px solid var(--borda);
+  background: var(--ambar-claro);
+  border: 1px solid var(--ambar);
+  border-left-width: 5px;
   border-radius: var(--raio);
+}
+
+.observacao h3 {
+  color: var(--ambar);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .observacao p {
   white-space: pre-wrap;
   margin-top: 0.3rem;
+  color: var(--tinta);
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 
 .resultado-topo {
@@ -1184,7 +1196,7 @@ textarea.entrada {
 .tabela-rolagem {
   overflow-x: auto;
   background: var(--superficie);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--borda-forte);
   border-radius: var(--raio);
 }
 
@@ -1208,10 +1220,21 @@ textarea.entrada {
 
 .tabela thead th {
   font-size: 0.78rem;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--tinta-suave);
+  color: var(--tinta);
   background: var(--superficie-2);
+  border-bottom: 2px solid var(--borda-forte);
+}
+
+.tabela tbody td {
+  font-weight: 500;
+}
+
+.tabela tbody td:first-child,
+.tabela tbody td.num {
+  font-weight: 700;
 }
 
 .tabela tfoot th {
@@ -1227,7 +1250,8 @@ textarea.entrada {
 .tabela td.valores {
   white-space: normal;
   font-variant-numeric: tabular-nums;
-  color: var(--tinta-suave);
+  color: var(--tinta);
+  font-weight: 600;
 }
 
 .tabela-compacta th,
@@ -1639,4 +1663,45 @@ textarea.entrada {
 .conteudo > .campo,
 .grade-resumo + .campo {
   margin-top: 1.25rem;
+}
+
+/* ---- reforço de contraste ------------------------------------------------ */
+
+.observacao.valor-adm h3,
+.observacao.valor-adm p {
+  color: var(--azul);
+}
+
+.cupom,
+.memoria {
+  border: 1px solid var(--borda-forte);
+}
+
+.cupom-titulo,
+.memoria h3 {
+  color: var(--tinta);
+  font-weight: 800;
+}
+
+.cupom-linha dt,
+.memoria-linhas dt,
+.memoria-linhas dd {
+  font-weight: 600;
+}
+
+.cupom-linha.zerada dt,
+.cupom-linha.zerada dd {
+  font-weight: 500;
+}
+
+.memoria-resultado dt,
+.memoria-resultado dd {
+  font-weight: 800;
+}
+
+.memoria-nota,
+.nota,
+.subtitulo {
+  color: var(--tinta-suave);
+  font-weight: 500;
 }

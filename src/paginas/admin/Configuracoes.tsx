@@ -106,7 +106,7 @@ export function Configuracoes() {
       <section className="bloco">
         <h2>Fórmula do dinheiro</h2>
         <p className="formula">Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco)</p>
-        <p className="nota">Regra v1, fiel à planilha original. Não é editável: uma mudança exige nova versão documentada da regra.</p>
+        <p className="nota">Do dinheiro da gaveta sai o valor de abertura, que não é venda; a sangria de troco volta para a conta. A fórmula é fixa e vale para todos os fechamentos.</p>
       </section>
 
       <section className="bloco">

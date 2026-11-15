@@ -16,7 +16,7 @@ interface Props {
   autoFocus?: boolean;
 }
 
-/** As colunas lado a lado, como na planilha. No celular, uma coluna por vez, escolhida nas abas. */
+/** As colunas lado a lado, uma por forma de pagamento. No celular, uma coluna por vez, escolhida nas abas. */
 export function PainelColunas({ formas, comDinheiro, lancamentos, aoMudar, autoFocus }: Props) {
   const colunas = [
     ...formas.map((f) => ({ chave: f.formaId, titulo: f.nome, formaId: f.formaId as string | null })),

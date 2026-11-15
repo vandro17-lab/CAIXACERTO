@@ -70,7 +70,7 @@ export function Detalhe() {
         <div>
           <FormulaDinheiro r={r} adm={adm} />
           <p className="nota">
-            Fórmula aplicada (regra v1, fiel à planilha): Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco).
+            Como é calculado: Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco).
           </p>
         </div>
       </div>
