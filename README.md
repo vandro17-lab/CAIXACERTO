@@ -37,6 +37,7 @@ A API local usa um Postgres embutido (pasta `.dados-locais`); não precisa de co
    está em `.env.production` (é público). O `vercel.json` já cuida das rotas.
 2. **Backend/banco (Supabase):** já publicados no projeto `caixacerto`. Para republicar depois de mudar o código:
    `supabase functions deploy api --no-verify-jwt` e aplicar novas migrações de `supabase/migrations/`.
+   Depois de republicar, rodar `node ferramentas/conferir-rotas.mjs`: confere que todas as rotas respondem.
 3. **Restringir origem (recomendado):** depois de saber o endereço da Vercel, criar no Supabase o segredo
    `ORIGENS_PERMITIDAS` da função (ex.: `https://caixacerto.vercel.app`).
 
