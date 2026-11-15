@@ -14,6 +14,7 @@ const ROTAS: Rota[] = [
   ["GET", new RegExp(`^/fechamentos/${ID}$`), fech.obter],
   ["POST", new RegExp(`^/fechamentos/${ID}/acesso$`), fech.acesso],
   ["PUT", new RegExp(`^/fechamentos/${ID}/rascunho$`), fech.salvarRascunho],
+  ["POST", new RegExp(`^/fechamentos/${ID}/abertura$`), fech.conferirAbertura],
   ["POST", new RegExp(`^/fechamentos/${ID}/finalizar$`), fech.finalizar],
   ["POST", new RegExp(`^/fechamentos/${ID}/corrigir$`), fech.corrigir],
   ["POST", /^\/admin\/sessao$/, adm.entrar],
@@ -33,6 +34,7 @@ const ROTAS: Rota[] = [
   ["PUT", new RegExp(`^/admin/formas-pagamento/${ID}$`), (c, id) => adm.alterar(c, "formas", id)],
   ["PUT", /^\/admin\/formas-pagamento-ordem$/, adm.ordenarFormas],
   ["PUT", /^\/admin\/parametros$/, adm.salvarParametros],
+  ["PUT", /^\/admin\/senha-gerente$/, adm.salvarSenhaGerente],
 ];
 
 /** GET /config — o que a tela de novo fechamento precisa: lojas, formas, usuários ativos e parâmetros. */

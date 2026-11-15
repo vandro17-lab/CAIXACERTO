@@ -57,7 +57,7 @@ export function montarCsv(itens: ItemConsulta[]): string {
   const celula = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
   const valor = (c: number | null | undefined) => (c == null ? "" : formatarNumero(c));
   const linhas = [
-    ["Data", "Turno", "Loja", "Responsável", "Status", "Corrigido", ...formas.values(), "Dinheiro a lançar", "Total a lançar"],
+    ["Data", "Turno", "Loja", "Responsável", "Status", "Corrigido", ...formas.values(), "Dinheiro a lançar", "Total a lançar", "Abertura com divergência"],
     ...itens.map((i) => [
       formatarData(i.dataLocal),
       NOME_TURNO[i.turno],
@@ -68,6 +68,7 @@ export function montarCsv(itens: ItemConsulta[]): string {
       ...[...formas.keys()].map((id) => valor(i.formas.find((f) => f.formaId === id)?.subtotalCentavos)),
       valor(i.dinheiroLancarCentavos),
       valor(i.totalLancarCentavos),
+      i.aberturaDivergente ? `Esperado ${formatarNumero(i.aberturaDivergente.esperadoCentavos)} / encontrado ${formatarNumero(i.aberturaDivergente.encontradoCentavos)}` : "Não",
     ]),
   ];
   return "﻿" + linhas.map((l) => l.map(celula).join(";")).join("\r\n");
@@ -197,6 +198,7 @@ export function Consultas() {
                       <td>
                         {i.status === "rascunho" ? <Etiqueta cor="ambar">Rascunho</Etiqueta> : i.quantidadeCorrecoes > 0 ? <Etiqueta>Corrigido</Etiqueta> : <Etiqueta cor="verde">Finalizado</Etiqueta>}
                         {i.quantidadeEdicoesAdm > 0 && <> <Etiqueta cor="azul">Editado pelo ADM</Etiqueta></>}
+                        {i.aberturaDivergente && <> <Etiqueta cor="vermelha">Abertura com divergência</Etiqueta></>}
                       </td>
                       <td className="num">{i.dinheiroLancarCentavos === null ? "—" : formatarReais(i.dinheiroLancarCentavos)}</td>
                       <td className="num">{i.totalLancarCentavos === null ? "—" : formatarReais(i.totalLancarCentavos)}</td>

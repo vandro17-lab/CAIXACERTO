@@ -110,6 +110,15 @@ export function Configuracoes() {
       </section>
 
       <section className="bloco">
+        <h2>Senha do gerente</h2>
+        <p className="nota">
+          Uma só para todas as lojas, com 4 dígitos. Serve apenas para liberar a abertura do caixa quando o valor da gaveta não confere
+          (e para mudar a abertura na correção). Não dá acesso a Consultas nem a Configurações.
+        </p>
+        <SenhaGerente cadastrada={config.senhaGerenteCadastrada === true} ocupado={ocupado} aoSalvar={(senha) => aplicar((t) => api.adm.salvarSenhaGerente(t, senha))} />
+      </section>
+
+      <section className="bloco">
         <h2>Segurança</h2>
         <div className="acoes">
           <Link to="/admin/trocar-senha" state={{ destino: "/admin/configuracoes" }} className="botao botao-contorno">Alterar senha do ADM</Link>
@@ -274,5 +283,53 @@ function Usuarios({ config, ocupado, aplicar }: UsuariosProps) {
       </form>
       {nome.trim().length >= 2 && !lojasDoNovo.length && <p className="nota">Marque ao menos uma loja para o novo usuário.</p>}
     </>
+  );
+}
+
+/** Cadastro e troca da senha do gerente. A senha é digitada duas vezes e só o servidor a guarda (como hash). */
+function SenhaGerente({ cadastrada, ocupado, aoSalvar }: { cadastrada: boolean; ocupado: boolean; aoSalvar(senha: string): Promise<boolean> }) {
+  const [senha, setSenha] = useState("");
+  const [repeticao, setRepeticao] = useState("");
+  const [tentou, setTentou] = useState(false);
+  const [salva, setSalva] = useState(false);
+  const digitos = (v: string) => v.replace(/\D/g, "").slice(0, 4);
+  const valida = /^\d{4}$/.test(senha);
+  const confere = senha === repeticao;
+
+  return (
+    <form
+      className="formulario"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setTentou(true);
+        setSalva(false);
+        if (!valida || !confere) return;
+        if (await aoSalvar(senha)) {
+          setSenha("");
+          setRepeticao("");
+          setTentou(false);
+          setSalva(true);
+        }
+      }}
+    >
+      <p>{cadastrada ? <Etiqueta cor="verde">Senha cadastrada</Etiqueta> : <Etiqueta cor="ambar">Ainda não cadastrada</Etiqueta>}</p>
+      {!cadastrada && <p className="nota">Sem ela, nenhuma loja consegue liberar uma abertura com divergência.</p>}
+      <div className="dupla">
+        <div className="campo">
+          <label className="campo-rotulo" htmlFor="ger-senha">{cadastrada ? "Nova senha do gerente" : "Senha do gerente"}</label>
+          <input id="ger-senha" className="entrada" type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} value={senha} onChange={(e) => setSenha(digitos(e.target.value))} />
+          {tentou && !valida && <p className="campo-erro" role="alert">Informe exatamente 4 dígitos.</p>}
+        </div>
+        <div className="campo">
+          <label className="campo-rotulo" htmlFor="ger-repete">Repita a senha</label>
+          <input id="ger-repete" className="entrada" type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} value={repeticao} onChange={(e) => setRepeticao(digitos(e.target.value))} />
+          {tentou && valida && !confere && <p className="campo-erro" role="alert">As duas senhas não são iguais.</p>}
+        </div>
+      </div>
+      {salva && <Aviso tipo="ok">Senha do gerente gravada.</Aviso>}
+      <div className="acoes">
+        <button type="submit" className="botao botao-primario" disabled={ocupado}>{cadastrada ? "Alterar senha do gerente" : "Cadastrar senha do gerente"}</button>
+      </div>
+    </form>
   );
 }

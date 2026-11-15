@@ -8,7 +8,7 @@ import { api, FalhaApi } from "../../api.ts";
 import { MolduraAdm, useAdm } from "../../adm.tsx";
 import { Aviso, Carregando, Etiqueta } from "../../componentes/Moldura.tsx";
 import { Cupom80 } from "../../componentes/Cupom80.tsx";
-import { FormulaDinheiro, LegendaAdm, ListaLancar } from "../../componentes/Resumo.tsx";
+import { divergenciaDe, FormulaDinheiro, LegendaAdm, ListaLancar, textoDivergencia } from "../../componentes/Resumo.tsx";
 import { dataHora } from "../Resultado.tsx";
 
 const TIPO_ALTERACAO = { finalizacao: "Finalização", correcao: "Correção do funcionário", edicao_adm: "Edição do administrador" } as const;
@@ -31,6 +31,7 @@ export function Detalhe() {
   const r: Resumo = f.snapshot ?? montarResumo(f, d.formas);
   const observacao = f.snapshot?.observacao ?? f.observacao;
   const adm = f.snapshot?.alteradoPeloAdm;
+  const divergencia = divergenciaDe(f);
   const marcaAdm = (chave: string) => (adm?.includes(chave) ? "valor-adm" : "");
   return (
     <MolduraAdm>
@@ -41,6 +42,7 @@ export function Detalhe() {
           {f.status === "rascunho" ? <Etiqueta cor="ambar">Rascunho</Etiqueta> : <Etiqueta cor="verde">Finalizado · versão {f.versao}</Etiqueta>}
           {f.quantidadeCorrecoes > 0 && <Etiqueta>Corrigido uma vez pelo funcionário</Etiqueta>}
           {f.quantidadeEdicoesAdm > 0 && <Etiqueta cor="azul">Editado pelo administrador ({f.quantidadeEdicoesAdm})</Etiqueta>}
+          {divergencia && <Etiqueta cor="vermelha">Abertura com divergência</Etiqueta>}
         </div>
       </div>
       <div className="acoes nao-imprimir">
@@ -51,7 +53,8 @@ export function Detalhe() {
         dados={{
           lojaNome: f.lojaNome, dataLocal: f.dataLocal, turno: f.turno, responsavelNome: f.responsavelNome,
           situacao: f.status === "rascunho" ? "RASCUNHO — ainda não finalizado" : `Versão ${f.versao} · ${dataHora(f.versao > 1 ? f.atualizadoEm : f.finalizadoEm ?? f.atualizadoEm)}`,
-          avisos: [...(f.quantidadeCorrecoes > 0 ? ["Corrigido uma vez pelo funcionário"] : []), ...(f.quantidadeEdicoesAdm > 0 ? ["Editado pelo administrador"] : [])],
+          avisos: [...(f.quantidadeCorrecoes > 0 ? ["Corrigido uma vez pelo funcionário"] : []), ...(f.quantidadeEdicoesAdm > 0 ? ["Editado pelo administrador"] : []),
+            ...(divergencia ? [textoDivergencia(divergencia)] : [])],
           observacao,
         }}
         r={r}
@@ -68,7 +71,7 @@ export function Detalhe() {
       <div className="grade-resumo">
         <ListaLancar r={r} mostrarZerados adm={adm} />
         <div>
-          <FormulaDinheiro r={r} adm={adm} />
+          <FormulaDinheiro r={r} adm={adm} divergencia={divergencia} />
           <p className="nota">
             Como é calculado: Dinheiro a lançar = Dinheiro da gaveta − (Abertura − Sangria de troco).
           </p>

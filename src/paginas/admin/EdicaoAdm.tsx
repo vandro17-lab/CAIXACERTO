@@ -126,7 +126,16 @@ function Editor({ f, antes, formasTodas }: { f: Fechamento; antes: Snapshot; for
       <h2>Abertura e sangria</h2>
       <div className="grade-resumo">
         <div className="pilha">
-          <CampoMoeda rotulo="Valor de abertura" valor={valores.aberturaCentavos} aoMudar={(c) => setValores((v) => ({ ...v, aberturaCentavos: c }))} />
+          <CampoMoeda
+            rotulo="Valor de abertura"
+            valor={valores.aberturaCentavos}
+            ajuda={
+              f.abertura.esperadoCentavos === null
+                ? undefined
+                : `Esperado: ${formatarReais(f.abertura.esperadoCentavos)} (dinheiro da gaveta do fechamento anterior). Com outro valor, o fechamento fica marcado como abertura com divergência.`
+            }
+            aoMudar={(c) => setValores((v) => ({ ...v, aberturaCentavos: c }))}
+          />
           <CampoSangria
             houve={valores.houveSangria}
             centavos={valores.sangriaCentavos}

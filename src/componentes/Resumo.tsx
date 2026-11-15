@@ -1,5 +1,17 @@
 import { formatarReais } from "@dominio/dinheiro.ts";
-import type { Resumo } from "@dominio/tipos.ts";
+import type { DivergenciaAbertura, Fechamento, Resumo } from "@dominio/tipos.ts";
+
+/** A marca de "abertura com divergência" de um fechamento (finalizado ou ainda em rascunho), se houver. */
+export function divergenciaDe(f: Fechamento): DivergenciaAbertura | undefined {
+  if (f.snapshot) return f.snapshot.aberturaDivergente;
+  return f.abertura.situacao === "divergente" && f.abertura.esperadoCentavos !== null && f.aberturaCentavos !== null
+    ? { esperadoCentavos: f.abertura.esperadoCentavos, encontradoCentavos: f.aberturaCentavos }
+    : undefined;
+}
+
+/** Texto único da marca, usado na tela, no cupom e no resumo copiado. */
+export const textoDivergencia = (d: DivergenciaAbertura) =>
+  `Abertura com divergência: esperado ${formatarReais(d.esperadoCentavos)}, encontrado ${formatarReais(d.encontradoCentavos)}`;
 
 /** Classe que pinta de outra cor um valor definido por edição do administrador. */
 const doAdm = (adm: string[] | undefined, chave: string) => (adm?.includes(chave) ? " valor-adm" : "");
@@ -46,7 +58,7 @@ export function ListaLancar({ r, mostrarZerados, adm }: PropsLista) {
 }
 
 /** A fórmula do dinheiro, legível: contado − abertura + sangria = a lançar. */
-export function FormulaDinheiro({ r, titulo = "Memória do cálculo", adm }: { r: Resumo; titulo?: string; adm?: string[] }) {
+export function FormulaDinheiro({ r, titulo = "Memória do cálculo", adm, divergencia }: { r: Resumo; titulo?: string; adm?: string[]; divergencia?: DivergenciaAbertura }) {
   const negativo = r.dinheiroLancarCentavos < 0;
   return (
     <div className="memoria">
@@ -60,6 +72,7 @@ export function FormulaDinheiro({ r, titulo = "Memória do cálculo", adm }: { r
           <dd>{formatarReais(r.dinheiroLancarCentavos)}</dd>
         </div>
       </dl>
+      {divergencia && <p className="memoria-divergencia" role="note">{textoDivergencia(divergencia)}.</p>}
       <p className="memoria-nota">Abertura, sangria e dinheiro da gaveta servem só para este cálculo: não são somados de novo ao total.</p>
     </div>
   );
